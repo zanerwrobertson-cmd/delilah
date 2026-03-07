@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { ShaderAnimation } from "@/components/ui/shader-animation";
 import { BookOpen, Brain, Zap, Target } from "lucide-react";
 
 const features = [
