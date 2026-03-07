@@ -53,6 +53,42 @@ export type Database = {
         }
         Relationships: []
       }
+      quiz_results: {
+        Row: {
+          course: string
+          created_at: string
+          id: string
+          mode: string
+          score: number
+          time_taken_seconds: number | null
+          total: number
+          user_id: string
+          weak_areas: string[] | null
+        }
+        Insert: {
+          course: string
+          created_at?: string
+          id?: string
+          mode: string
+          score: number
+          time_taken_seconds?: number | null
+          total: number
+          user_id: string
+          weak_areas?: string[] | null
+        }
+        Update: {
+          course?: string
+          created_at?: string
+          id?: string
+          mode?: string
+          score?: number
+          time_taken_seconds?: number | null
+          total?: number
+          user_id?: string
+          weak_areas?: string[] | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
