@@ -45,14 +45,18 @@ export default function Onboarding() {
     if (!user) return;
     setSaving(true);
 
-    const validGrades = skipGrades ? [] : grades.filter((g) => g.course.trim() && g.grade.trim());
+    const validGrades = skipGrades
+      ? []
+      : grades
+          .filter((g) => g.course.trim() && g.grade.trim())
+          .map((g) => ({ course: g.course, grade: g.grade } as Record<string, string>));
 
     const { error } = await supabase
       .from("profiles")
       .update({
         learning_style: learningStyle,
         struggle_subjects: subjects.trim(),
-        grades: validGrades,
+        grades: validGrades as unknown as import("@/integrations/supabase/types").Json,
         onboarding_completed: true,
       })
       .eq("user_id", user.id);
