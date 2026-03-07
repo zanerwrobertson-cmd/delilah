@@ -29,21 +29,26 @@ export default function Landing() {
       </nav>
 
       {/* Hero */}
-      <section className="flex flex-col items-center px-6 pt-24 pb-20 text-center md:pt-36">
-        <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-4 py-1.5 text-sm text-muted-foreground">
-          <Zap className="h-3.5 w-3.5 text-primary" />
-          AI-powered learning
+      <section className="relative flex flex-col items-center px-6 pt-24 pb-20 text-center md:pt-36">
+        <div className="absolute inset-0 overflow-hidden opacity-30 pointer-events-none">
+          <ShaderAnimation />
         </div>
-        <h1 className="max-w-3xl font-display text-5xl font-bold leading-tight text-foreground md:text-7xl animate-fade-in">
-          Your AI study companion.{" "}
-          <span className="gradient-text">Built around how you learn.</span>
-        </h1>
-        <p className="mt-6 max-w-xl text-lg text-muted-foreground animate-fade-in" style={{ animationDelay: "0.15s" }}>
-          Delilah creates personalized study plans, quizzes you on weak spots, and preps you for exams — all powered by AI that understands your learning style.
-        </p>
-        <Button size="lg" className="mt-10 px-8 text-base animate-fade-in animate-pulse-glow" style={{ animationDelay: "0.3s" }} asChild>
-          <Link to="/signup">Get Started Free</Link>
-        </Button>
+        <div className="relative z-10">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-4 py-1.5 text-sm text-muted-foreground">
+            <Zap className="h-3.5 w-3.5 text-primary" />
+            AI-powered learning
+          </div>
+          <h1 className="max-w-3xl font-display text-5xl font-bold leading-tight text-foreground md:text-7xl animate-fade-in">
+            Your AI study companion.{" "}
+            <span className="gradient-text">Built around how you learn.</span>
+          </h1>
+          <p className="mt-6 max-w-xl mx-auto text-lg text-muted-foreground animate-fade-in" style={{ animationDelay: "0.15s" }}>
+            Delilah creates personalized study plans, quizzes you on weak spots, and preps you for exams — all powered by AI that understands your learning style.
+          </p>
+          <Button size="lg" className="mt-10 px-8 text-base animate-fade-in animate-pulse-glow" style={{ animationDelay: "0.3s" }} asChild>
+            <Link to="/signup">Get Started Free</Link>
+          </Button>
+        </div>
       </section>
 
       {/* Features */}
