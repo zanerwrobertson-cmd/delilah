@@ -102,18 +102,17 @@ export default function UploadSyllabus() {
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke("parse-syllabus", {
-        body: { filePath, courseName: courseName.trim() },
-      });
-
-      if (error) {
-        toast({ title: "Extraction failed", description: "Could not extract data from the syllabus.", variant: "destructive" });
-      } else if (data?.error) {
-        toast({ title: "Extraction failed", description: data.error, variant: "destructive" });
-      } else {
-        setResults(data);
-        toast({ title: "Syllabus processed!", description: `Found ${data.assignments_count} deadlines and ${data.topics_count} topics.` });
+      // TODO: Replace with pdfjs-dist text extraction + direct Claude API call
+      // For now, this is a placeholder for the client-side implementation
+      const CLAUDE_API_KEY = import.meta.env.VITE_CLAUDE_API_KEY;
+      if (!CLAUDE_API_KEY) {
+        toast({ title: "Missing API key", description: "VITE_CLAUDE_API_KEY is not configured.", variant: "destructive" });
+        setLoading(false);
+        return;
       }
+
+      // Placeholder: read PDF text client-side, then call Claude directly
+      toast({ title: "Not yet implemented", description: "Client-side PDF parsing coming soon.", variant: "destructive" });
     } catch {
       toast({ title: "Error", description: "Something went wrong. Please try again.", variant: "destructive" });
     } finally {
