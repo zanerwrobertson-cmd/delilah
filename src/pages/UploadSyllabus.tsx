@@ -52,9 +52,7 @@ export default function UploadSyllabus() {
   } | null>(null);
   const [flaggedTopics, setFlaggedTopics] = useState<Set<string>>(new Set());
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
-    if (!selected) return;
+  const validateAndSetFile = (selected: File) => {
     if (selected.type !== "application/pdf") {
       toast({ title: "Invalid file", description: "Please upload a PDF file.", variant: "destructive" });
       return;
@@ -66,6 +64,23 @@ export default function UploadSyllabus() {
     setFile(selected);
     setResults(null);
     setFlaggedTopics(new Set());
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0];
+    if (selected) validateAndSetFile(selected);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const selected = e.dataTransfer.files?.[0];
+    if (selected) validateAndSetFile(selected);
   };
 
   const handleExtract = async () => {
