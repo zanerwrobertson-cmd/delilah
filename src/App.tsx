@@ -17,6 +17,7 @@ import StudyPlan from "./pages/StudyPlan";
 import QuizMe from "./pages/QuizMe";
 import ExamPrep from "./pages/ExamPrep";
 import SettingsPage from "./pages/SettingsPage";
+import UploadSyllabus from "./pages/UploadSyllabus";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
