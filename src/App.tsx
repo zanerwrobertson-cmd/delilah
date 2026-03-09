@@ -41,6 +41,7 @@ const App = () => (
               <Route path="study-plan" element={<StudyPlan />} />
               <Route path="quiz" element={<QuizMe />} />
               <Route path="exam-prep" element={<ExamPrep />} />
+              <Route path="upload-syllabus" element={<UploadSyllabus />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
