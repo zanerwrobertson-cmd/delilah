@@ -1,18 +1,25 @@
 import { useAuth } from "@/hooks/useAuth";
 import { Navigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const [checkingOnboarding, setCheckingOnboarding] = useState(true);
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
+  const lastCheckedUserId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!user) {
       setCheckingOnboarding(false);
+      setOnboardingCompleted(null);
+      lastCheckedUserId.current = null;
       return;
     }
+
+    // Don't re-query if we already checked this user
+    if (lastCheckedUserId.current === user.id) return;
+    lastCheckedUserId.current = user.id;
 
     supabase
       .from("profiles")
