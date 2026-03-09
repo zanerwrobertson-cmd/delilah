@@ -1,4 +1,4 @@
-import { LayoutDashboard, CalendarDays, HelpCircle, GraduationCap, Settings, LogOut, BookOpen } from "lucide-react";
+import { LayoutDashboard, CalendarDays, HelpCircle, GraduationCap, Settings, LogOut, BookOpen, Upload } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
