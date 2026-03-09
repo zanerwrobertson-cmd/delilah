@@ -188,6 +188,8 @@ export default function UploadSyllabus() {
           <Label>Syllabus PDF</Label>
           <div
             onClick={() => !loading && fileInputRef.current?.click()}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
             className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
               file
                 ? "border-primary/50 bg-primary/5"
