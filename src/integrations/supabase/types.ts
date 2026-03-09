@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      assignments: {
+        Row: {
+          assignment_name: string
+          course_name: string
+          created_at: string
+          deadline: string | null
+          id: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          assignment_name: string
+          course_name: string
+          created_at?: string
+          deadline?: string | null
+          id?: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          assignment_name?: string
+          course_name?: string
+          created_at?: string
+          deadline?: string | null
+          id?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -86,6 +116,63 @@ export type Database = {
           total?: number
           user_id?: string
           weak_areas?: string[] | null
+        }
+        Relationships: []
+      }
+      study_sessions: {
+        Row: {
+          course_name: string
+          created_at: string
+          id: string
+          topic_name: string
+          user_id: string
+          weak_areas: string[] | null
+        }
+        Insert: {
+          course_name: string
+          created_at?: string
+          id?: string
+          topic_name: string
+          user_id: string
+          weak_areas?: string[] | null
+        }
+        Update: {
+          course_name?: string
+          created_at?: string
+          id?: string
+          topic_name?: string
+          user_id?: string
+          weak_areas?: string[] | null
+        }
+        Relationships: []
+      }
+      topics: {
+        Row: {
+          course_name: string
+          created_at: string
+          id: string
+          is_weak_area: boolean
+          topic_name: string
+          user_id: string
+          week_number: number | null
+        }
+        Insert: {
+          course_name: string
+          created_at?: string
+          id?: string
+          is_weak_area?: boolean
+          topic_name: string
+          user_id: string
+          week_number?: number | null
+        }
+        Update: {
+          course_name?: string
+          created_at?: string
+          id?: string
+          is_weak_area?: boolean
+          topic_name?: string
+          user_id?: string
+          week_number?: number | null
         }
         Relationships: []
       }
