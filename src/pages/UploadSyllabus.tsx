@@ -105,13 +105,6 @@ export default function UploadSyllabus() {
     setFlaggedTopics(new Set());
 
     try {
-      const CLAUDE_API_KEY = import.meta.env.VITE_CLAUDE_API_KEY;
-      if (!CLAUDE_API_KEY) {
-        toast({ title: "Missing API key", description: "VITE_CLAUDE_API_KEY is not configured.", variant: "destructive" });
-        setLoading(false);
-        return;
-      }
-
       // 1. Extract text from PDF in browser
       const pdfText = await extractTextFromPdf(file);
       if (!pdfText.trim()) {
@@ -120,22 +113,8 @@ export default function UploadSyllabus() {
         return;
       }
 
-      // 2. Call Claude API directly
-      const claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": CLAUDE_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "Content-Type": "application/json",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 4096,
-          messages: [
-            {
-              role: "user",
-              content: `You are a syllabus parser. Extract all assignments, exams, quizzes, projects, and papers with their deadlines, plus weekly topics from this syllabus text for the course "${courseName.trim()}".
+      // 2. Call Claude via secure proxy edge function
+      const prompt = `You are a syllabus parser. Extract all assignments, exams, quizzes, projects, and papers with their deadlines, plus weekly topics from this syllabus text for the course "${courseName.trim()}".
 
 Return ONLY valid JSON in this exact format (no markdown, no explanation):
 {
@@ -150,22 +129,20 @@ Return ONLY valid JSON in this exact format (no markdown, no explanation):
 Extract as much as possible. Use null for unknown deadlines. Return ONLY the JSON.
 
 SYLLABUS TEXT:
-${pdfText}`,
-            },
-          ],
-        }),
+${pdfText}`;
+
+      const { data: claudeData, error: fnError } = await supabase.functions.invoke("claude-proxy", {
+        body: { prompt },
       });
 
-      if (!claudeResponse.ok) {
-        const errText = await claudeResponse.text();
-        console.error("Claude API error:", claudeResponse.status, errText);
-        toast({ title: "AI processing failed", description: claudeResponse.status === 429 ? "Rate limit exceeded. Try again shortly." : "Could not process syllabus.", variant: "destructive" });
+      if (fnError) {
+        console.error("Claude proxy error:", fnError);
+        toast({ title: "AI processing failed", description: "Could not process syllabus.", variant: "destructive" });
         setLoading(false);
         return;
       }
 
-      const claudeData = await claudeResponse.json();
-      const content = claudeData.content?.[0]?.text || "";
+      const content = claudeData?.content?.[0]?.text || "";
 
       // 3. Parse JSON response
       let parsed: { assignments: Assignment[]; topics: Topic[] };
