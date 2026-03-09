@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import * as pdfjsLib from "pdfjs-dist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -83,6 +84,19 @@ export default function UploadSyllabus() {
     if (selected) validateAndSetFile(selected);
   };
 
+  const extractTextFromPdf = async (pdfFile: File): Promise<string> => {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs`;
+    const arrayBuffer = await pdfFile.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const pages: string[] = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      pages.push(content.items.map((item: any) => item.str).join(" "));
+    }
+    return pages.join("\n\n");
+  };
+
   const handleExtract = async () => {
     if (!file || !courseName.trim() || !user) return;
 
@@ -91,19 +105,6 @@ export default function UploadSyllabus() {
     setFlaggedTopics(new Set());
 
     try {
-      const filePath = `${user.id}/${Date.now()}_${file.name}`;
-      const { error: uploadError } = await supabase.storage
-        .from("syllabi")
-        .upload(filePath, file, { contentType: "application/pdf" });
-
-      if (uploadError) {
-        toast({ title: "Upload failed", description: uploadError.message, variant: "destructive" });
-        setLoading(false);
-        return;
-      }
-
-      // TODO: Replace with pdfjs-dist text extraction + direct Claude API call
-      // For now, this is a placeholder for the client-side implementation
       const CLAUDE_API_KEY = import.meta.env.VITE_CLAUDE_API_KEY;
       if (!CLAUDE_API_KEY) {
         toast({ title: "Missing API key", description: "VITE_CLAUDE_API_KEY is not configured.", variant: "destructive" });
@@ -111,9 +112,107 @@ export default function UploadSyllabus() {
         return;
       }
 
-      // Placeholder: read PDF text client-side, then call Claude directly
-      toast({ title: "Not yet implemented", description: "Client-side PDF parsing coming soon.", variant: "destructive" });
-    } catch {
+      // 1. Extract text from PDF in browser
+      const pdfText = await extractTextFromPdf(file);
+      if (!pdfText.trim()) {
+        toast({ title: "Empty PDF", description: "Could not extract text from the PDF.", variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+
+      // 2. Call Claude API directly
+      const claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": CLAUDE_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 4096,
+          messages: [
+            {
+              role: "user",
+              content: `You are a syllabus parser. Extract all assignments, exams, quizzes, projects, and papers with their deadlines, plus weekly topics from this syllabus text for the course "${courseName.trim()}".
+
+Return ONLY valid JSON in this exact format (no markdown, no explanation):
+{
+  "assignments": [
+    { "assignment_name": "string", "deadline": "YYYY-MM-DDTHH:mm:ss" or null, "type": "assignment" | "exam" | "quiz" | "project" | "paper" }
+  ],
+  "topics": [
+    { "week_number": 1, "topic_name": "string" }
+  ]
+}
+
+Extract as much as possible. Use null for unknown deadlines. Return ONLY the JSON.
+
+SYLLABUS TEXT:
+${pdfText}`,
+            },
+          ],
+        }),
+      });
+
+      if (!claudeResponse.ok) {
+        const errText = await claudeResponse.text();
+        console.error("Claude API error:", claudeResponse.status, errText);
+        toast({ title: "AI processing failed", description: claudeResponse.status === 429 ? "Rate limit exceeded. Try again shortly." : "Could not process syllabus.", variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+
+      const claudeData = await claudeResponse.json();
+      const content = claudeData.content?.[0]?.text || "";
+
+      // 3. Parse JSON response
+      let parsed: { assignments: Assignment[]; topics: Topic[] };
+      try {
+        const cleaned = content.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+        parsed = JSON.parse(cleaned);
+      } catch {
+        console.error("Failed to parse Claude response:", content);
+        toast({ title: "Parse error", description: "Could not parse the AI response.", variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+
+      // 4. Save to Supabase
+      if (parsed.assignments?.length) {
+        const assignments = parsed.assignments.map((a) => ({
+          user_id: user.id,
+          course_name: courseName.trim(),
+          assignment_name: a.assignment_name,
+          deadline: a.deadline || null,
+          type: a.type || "assignment",
+        }));
+        const { error: aErr } = await supabase.from("assignments").insert(assignments);
+        if (aErr) console.error("Insert assignments error:", aErr);
+      }
+
+      if (parsed.topics?.length) {
+        const topics = parsed.topics.map((t) => ({
+          user_id: user.id,
+          course_name: courseName.trim(),
+          week_number: t.week_number || null,
+          topic_name: t.topic_name,
+        }));
+        const { error: tErr } = await supabase.from("topics").insert(topics);
+        if (tErr) console.error("Insert topics error:", tErr);
+      }
+
+      // 5. Display results
+      setResults({
+        assignments_count: parsed.assignments?.length || 0,
+        topics_count: parsed.topics?.length || 0,
+        assignments: parsed.assignments || [],
+        topics: parsed.topics || [],
+      });
+      toast({ title: "Syllabus processed!", description: `Found ${parsed.assignments?.length || 0} deadlines and ${parsed.topics?.length || 0} topics.` });
+    } catch (err) {
+      console.error("Extraction error:", err);
       toast({ title: "Error", description: "Something went wrong. Please try again.", variant: "destructive" });
     } finally {
       setLoading(false);
