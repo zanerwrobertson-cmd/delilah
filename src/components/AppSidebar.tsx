@@ -21,6 +21,7 @@ const navItems = [
   { title: "Study Plan", url: "/dashboard/study-plan", icon: CalendarDays },
   { title: "Quiz Me", url: "/dashboard/quiz", icon: HelpCircle },
   { title: "Exam Prep", url: "/dashboard/exam-prep", icon: GraduationCap },
+  { title: "Upload Syllabus", url: "/dashboard/upload-syllabus", icon: Upload },
   { title: "Settings", url: "/dashboard/settings", icon: Settings },
 ];
 
