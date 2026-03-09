@@ -5,8 +5,36 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, FileText, Loader2, CheckCircle2, BookOpen } from "lucide-react";
+import { Upload, FileText, Loader2, CheckCircle2, BookOpen, AlertTriangle } from "lucide-react";
+
+const typeBadgeColors: Record<string, string> = {
+  exam: "bg-destructive text-destructive-foreground",
+  quiz: "bg-orange-500/15 text-orange-600 border-orange-500/30",
+  assignment: "bg-primary/15 text-primary border-primary/30",
+  project: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
+  paper: "bg-violet-500/15 text-violet-600 border-violet-500/30",
+};
+
+interface Assignment {
+  assignment_name: string;
+  deadline: string | null;
+  type: string;
+}
+
+interface Topic {
+  week_number: number | null;
+  topic_name: string;
+}
 
 export default function UploadSyllabus() {
   const { user } = useAuth();
@@ -19,9 +47,10 @@ export default function UploadSyllabus() {
   const [results, setResults] = useState<{
     assignments_count: number;
     topics_count: number;
-    assignments: any[];
-    topics: any[];
+    assignments: Assignment[];
+    topics: Topic[];
   } | null>(null);
+  const [flaggedTopics, setFlaggedTopics] = useState<Set<string>>(new Set());
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
@@ -36,6 +65,7 @@ export default function UploadSyllabus() {
     }
     setFile(selected);
     setResults(null);
+    setFlaggedTopics(new Set());
   };
 
   const handleExtract = async () => {
@@ -43,9 +73,9 @@ export default function UploadSyllabus() {
 
     setLoading(true);
     setResults(null);
+    setFlaggedTopics(new Set());
 
     try {
-      // Upload PDF to storage
       const filePath = `${user.id}/${Date.now()}_${file.name}`;
       const { error: uploadError } = await supabase.storage
         .from("syllabi")
@@ -57,7 +87,6 @@ export default function UploadSyllabus() {
         return;
       }
 
-      // Call edge function to parse
       const { data, error } = await supabase.functions.invoke("parse-syllabus", {
         body: { filePath, courseName: courseName.trim() },
       });
@@ -70,15 +99,57 @@ export default function UploadSyllabus() {
         setResults(data);
         toast({ title: "Syllabus processed!", description: `Found ${data.assignments_count} deadlines and ${data.topics_count} topics.` });
       }
-    } catch (err) {
+    } catch {
       toast({ title: "Error", description: "Something went wrong. Please try again.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
+  const handleFlagWeakArea = async (topic: Topic) => {
+    if (!user) return;
+    const key = `${topic.week_number}-${topic.topic_name}`;
+
+    // Toggle locally
+    setFlaggedTopics((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+
+    const isFlagging = !flaggedTopics.has(key);
+
+    // Update in DB
+    const { error } = await supabase
+      .from("topics")
+      .update({ is_weak_area: isFlagging })
+      .eq("user_id", user.id)
+      .eq("course_name", courseName.trim())
+      .eq("topic_name", topic.topic_name);
+
+    if (error) {
+      toast({ title: "Failed to update", description: error.message, variant: "destructive" });
+      // Revert
+      setFlaggedTopics((prev) => {
+        const next = new Set(prev);
+        if (isFlagging) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+    } else {
+      toast({
+        title: isFlagging ? "Flagged as weak area" : "Removed weak area flag",
+        description: topic.topic_name,
+      });
+    }
+  };
+
   return (
-    <div className="space-y-8 max-w-2xl">
+    <div className="space-y-8 max-w-4xl">
       <div>
         <h1 className="font-display text-3xl font-bold text-foreground">Upload Syllabus</h1>
         <p className="mt-1 text-muted-foreground">
@@ -87,7 +158,6 @@ export default function UploadSyllabus() {
       </div>
 
       <Card className="p-6 space-y-6">
-        {/* Course Name */}
         <div className="space-y-2">
           <Label htmlFor="courseName">Course Name</Label>
           <Input
@@ -99,7 +169,6 @@ export default function UploadSyllabus() {
           />
         </div>
 
-        {/* File Upload */}
         <div className="space-y-2">
           <Label>Syllabus PDF</Label>
           <div
@@ -135,7 +204,6 @@ export default function UploadSyllabus() {
           </div>
         </div>
 
-        {/* Extract Button */}
         <Button
           onClick={handleExtract}
           disabled={!file || !courseName.trim() || loading}
@@ -158,63 +226,106 @@ export default function UploadSyllabus() {
 
       {/* Results */}
       {results && (
-        <Card className="p-6 space-y-4">
-          <div className="flex items-center gap-2 text-primary">
-            <CheckCircle2 className="h-5 w-5" />
-            <h2 className="font-display text-lg font-bold">Extraction Complete</h2>
-          </div>
-
+        <div className="space-y-6">
+          {/* Assignments Table */}
           {results.assignments.length > 0 && (
-            <div>
-              <h3 className="font-medium text-foreground mb-2">
-                Deadlines ({results.assignments_count})
-              </h3>
-              <div className="space-y-2">
-                {results.assignments.map((a: any, i: number) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between rounded-lg border border-border p-3 text-sm"
-                  >
-                    <div>
-                      <span className="font-medium text-foreground">{a.assignment_name}</span>
-                      <span className="ml-2 rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                        {a.type}
-                      </span>
-                    </div>
-                    <span className="text-muted-foreground">
-                      {a.deadline
-                        ? new Date(a.deadline).toLocaleDateString()
-                        : "No date"}
-                    </span>
-                  </div>
-                ))}
+            <Card className="p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <CheckCircle2 className="h-5 w-5 text-primary" />
+                <h2 className="font-display text-lg font-bold text-foreground">
+                  Deadlines ({results.assignments_count})
+                </h2>
               </div>
-            </div>
+              <div className="rounded-lg border border-border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead>Assignment</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Deadline</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {results.assignments.map((a, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="font-medium text-foreground">
+                          {a.assignment_name}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={typeBadgeColors[a.type] || "bg-muted text-muted-foreground"}
+                          >
+                            {a.type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {a.deadline
+                            ? new Date(a.deadline).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              })
+                            : "No date"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
           )}
 
+          {/* Topics Table */}
           {results.topics.length > 0 && (
-            <div>
-              <h3 className="font-medium text-foreground mb-2">
-                Topics ({results.topics_count})
-              </h3>
-              <div className="space-y-2">
-                {results.topics.map((t: any, i: number) => (
-                  <div
-                    key={i}
-                    className="rounded-lg border border-border p-3 text-sm"
-                  >
-                    {t.week_number && (
-                      <span className="text-muted-foreground mr-2">
-                        Week {t.week_number}:
-                      </span>
-                    )}
-                    <span className="font-medium text-foreground">{t.topic_name}</span>
-                  </div>
-                ))}
+            <Card className="p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <BookOpen className="h-5 w-5 text-primary" />
+                <h2 className="font-display text-lg font-bold text-foreground">
+                  Weekly Topics ({results.topics_count})
+                </h2>
               </div>
-            </div>
+              <div className="rounded-lg border border-border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="w-20">Week</TableHead>
+                      <TableHead>Topic</TableHead>
+                      <TableHead className="w-40 text-right">Weak Area</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {results.topics.map((t, i) => {
+                      const key = `${t.week_number}-${t.topic_name}`;
+                      const isFlagged = flaggedTopics.has(key);
+                      return (
+                        <TableRow key={i}>
+                          <TableCell className="text-muted-foreground">
+                            {t.week_number ?? "—"}
+                          </TableCell>
+                          <TableCell className="font-medium text-foreground">
+                            {t.topic_name}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant={isFlagged ? "destructive" : "outline"}
+                              size="sm"
+                              onClick={() => handleFlagWeakArea(t)}
+                              className="gap-1"
+                            >
+                              <AlertTriangle className="h-3 w-3" />
+                              {isFlagged ? "Flagged" : "Flag Weak Area"}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
           )}
-        </Card>
+        </div>
       )}
     </div>
   );
