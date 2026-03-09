@@ -20,12 +20,19 @@ Deno.serve(async (req) => {
       });
     }
 
+    const CLAUDE_API_KEY = Deno.env.get("CLAUDE_API_KEY");
+    if (!CLAUDE_API_KEY) {
+      return new Response(JSON.stringify({ error: "CLAUDE_API_KEY is not configured" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Get user from token
     const token = authHeader.replace("Bearer ", "");
     const {
       data: { user },
@@ -48,14 +55,11 @@ Deno.serve(async (req) => {
     if (downloadError || !fileData) {
       return new Response(
         JSON.stringify({ error: "Failed to download file" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Convert PDF to base64 for the AI
+    // Convert PDF to base64
     const arrayBuffer = await fileData.arrayBuffer();
     const base64 = btoa(
       new Uint8Array(arrayBuffer).reduce(
@@ -64,78 +68,81 @@ Deno.serve(async (req) => {
       )
     );
 
-    // Use Lovable AI to extract syllabus data
-    const aiResponse = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: `You are a syllabus parser. Extract assignments/exams with deadlines, and weekly topics from this PDF syllabus for the course "${courseName}".
+    // Call Claude API
+    const claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": CLAUDE_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 4096,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "document",
+                source: {
+                  type: "base64",
+                  media_type: "application/pdf",
+                  data: base64,
+                },
+              },
+              {
+                type: "text",
+                text: `You are a syllabus parser. Extract all assignments, exams, quizzes, projects, and papers with their deadlines, plus weekly topics from this PDF syllabus for the course "${courseName}".
 
-Return ONLY valid JSON in this exact format:
+Return ONLY valid JSON in this exact format (no markdown, no explanation):
 {
   "assignments": [
-    { "assignment_name": "string", "deadline": "YYYY-MM-DDTHH:mm:ss", "type": "assignment|exam|quiz|project|paper" }
+    { "assignment_name": "string", "deadline": "YYYY-MM-DDTHH:mm:ss" or null, "type": "assignment" | "exam" | "quiz" | "project" | "paper" }
   ],
   "topics": [
     { "week_number": 1, "topic_name": "string" }
   ]
 }
 
-If you cannot find dates, use null for deadline. Extract as much as possible. Return ONLY the JSON, no markdown.`,
-                },
-                {
-                  type: "image_url",
-                  image_url: {
-                    url: `data:application/pdf;base64,${base64}`,
-                  },
-                },
-              ],
-            },
-          ],
-        }),
-      }
-    );
+Extract as much as possible. Use null for unknown deadlines. Return ONLY the JSON.`,
+              },
+            ],
+          },
+        ],
+      }),
+    });
 
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      console.error("AI error:", errText);
+    if (!claudeResponse.ok) {
+      const errText = await claudeResponse.text();
+      console.error("Claude API error:", claudeResponse.status, errText);
+
+      if (claudeResponse.status === 429) {
+        return new Response(
+          JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       return new Response(
         JSON.stringify({ error: "AI processing failed" }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const aiData = await aiResponse.json();
-    const content = aiData.choices?.[0]?.message?.content || "";
+    const claudeData = await claudeResponse.json();
+    const content = claudeData.content?.[0]?.text || "";
 
-    // Parse JSON from AI response (strip markdown fences if present)
+    // Parse JSON from Claude response
     let parsed;
     try {
       const cleaned = content.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
       parsed = JSON.parse(cleaned);
     } catch {
-      console.error("Failed to parse AI response:", content);
+      console.error("Failed to parse Claude response:", content);
       return new Response(
         JSON.stringify({ error: "Failed to parse syllabus data", raw: content }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -148,9 +155,7 @@ If you cannot find dates, use null for deadline. Extract as much as possible. Re
         deadline: a.deadline || null,
         type: a.type || "assignment",
       }));
-      const { error: aErr } = await supabase
-        .from("assignments")
-        .insert(assignments);
+      const { error: aErr } = await supabase.from("assignments").insert(assignments);
       if (aErr) console.error("Insert assignments error:", aErr);
     }
 
@@ -174,18 +179,13 @@ If you cannot find dates, use null for deadline. Extract as much as possible. Re
         assignments: parsed.assignments || [],
         topics: parsed.topics || [],
       }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
     console.error("Edge function error:", err);
     return new Response(
       JSON.stringify({ error: "Internal server error" }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
