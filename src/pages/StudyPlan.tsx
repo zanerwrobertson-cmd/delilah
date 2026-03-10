@@ -8,6 +8,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Loader2, CalendarDays, Lightbulb, BookOpen, SendHorizonal, CheckCircle2, AlertTriangle, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 interface DailyTask {
   day: string;
@@ -33,78 +34,143 @@ interface CoursePlan {
   weeks: WeekCard[];
 }
 
+interface TopicRow {
+  topic_name: string;
+  week_number: number | null;
+  is_weak_area: boolean;
+  course_name: string;
+}
+
 const ALL_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-const weekTemplates = [
-  {
-    topic: "A Real Intertemporal Model with Investment (Ch. 11)",
-    allTasks: [
-      "Read Chapter 11, sections 11.1–11.3",
-      "Solve end-of-chapter problems 1–5",
-      "Review lecture notes on investment decisions",
-      "Attend lecture & take active notes",
-      "Summarize key equations and graphs",
-      "Re-derive key proofs from scratch",
-      "Do practice exam questions on Ch. 11",
-    ],
-    tips: ["Focus on the firm's investment decision and Tobin's q.", "Draw the competitive equilibrium diagram from memory."],
-  },
-  {
-    topic: "Monetary Intertemporal Model (Ch. 12)", hasWeakArea: true,
-    allTasks: [
-      "Read Chapter 12, sections 12.1–12.4",
-      "Compare real vs monetary models side by side",
-      "Practice problem set on money neutrality",
-      "Attend lecture & review banking model",
-      "Create flashcards for monetary policy tools",
-      "Review money demand derivations",
-      "Summarize chapter in your own words",
-    ],
-    weakTaskIndices: [1, 2],
-    tips: ["Understand the difference between money neutrality and superneutrality.", "Practice shifting curves when monetary policy changes."],
-  },
-  {
-    topic: "Business Cycles (Ch. 13)",
-    allTasks: [
-      "Read Chapter 13, focus on RBC theory",
-      "List key business cycle facts from the data",
-      "Work through RBC model problem set",
-      "Attend lecture on Keynesian vs RBC",
-      "Quiz yourself on business cycle definitions",
-      "Compare impulse response functions",
-      "Write summary notes on Solow residuals",
-    ],
-    tips: ["Know the key comovements: output, consumption, investment, employment.", "Be ready to compare RBC and Keynesian explanations on an exam."],
-  },
-  {
-    topic: "Inflation: Phillips Curves & Neo-Fisherism (Ch. 14)", hasWeakArea: true,
-    allTasks: [
-      "Read Chapter 14 on Phillips Curve history",
-      "Solve problems on expectations-augmented Phillips Curve",
-      "Review Neo-Fisherian arguments",
-      "Attend lecture & compare inflation models",
-      "Start midterm 1 review — Chapters 11–14",
-      "Graph Phillips Curve shifts from memory",
-      "Do timed practice problems on inflation",
-    ],
-    weakTaskIndices: [1],
-    tips: ["Understand why the original Phillips Curve broke down in the 1970s.", "Neo-Fisherism is a likely exam question — know the core argument."],
-  },
-];
-
-function generateWeeks(daysPerWeek: number): WeekCard[] {
+async function generatePlanWithAI(
+  courseName: string,
+  topics: TopicRow[],
+  daysPerWeek: number
+): Promise<WeekCard[]> {
   const days = ALL_DAYS.slice(0, daysPerWeek);
-  return weekTemplates.map((tmpl, i) => ({
-    week: i + 1,
-    topic: tmpl.topic,
-    hasWeakArea: tmpl.hasWeakArea,
-    tasks: days.map((day, di) => ({
-      day,
-      task: tmpl.allTasks[di % tmpl.allTasks.length],
-      isWeakArea: tmpl.weakTaskIndices?.includes(di),
-    })),
-    tips: tmpl.tips,
-  }));
+
+  // Group topics by week
+  const topicsByWeek = new Map<number, TopicRow[]>();
+  const unassigned: TopicRow[] = [];
+
+  topics.forEach((t) => {
+    if (t.week_number != null) {
+      const list = topicsByWeek.get(t.week_number) || [];
+      list.push(t);
+      topicsByWeek.set(t.week_number, list);
+    } else {
+      unassigned.push(t);
+    }
+  });
+
+  // If no week numbers, chunk topics evenly
+  if (topicsByWeek.size === 0 && unassigned.length > 0) {
+    const chunkSize = Math.max(1, Math.ceil(unassigned.length / Math.max(unassigned.length, 4)));
+    let weekNum = 1;
+    for (let i = 0; i < unassigned.length; i += chunkSize) {
+      topicsByWeek.set(weekNum, unassigned.slice(i, i + chunkSize));
+      weekNum++;
+    }
+  } else if (unassigned.length > 0) {
+    // Add unassigned to last week
+    const maxWeek = Math.max(...topicsByWeek.keys());
+    const list = topicsByWeek.get(maxWeek) || [];
+    list.push(...unassigned);
+    topicsByWeek.set(maxWeek, list);
+  }
+
+  const sortedWeeks = [...topicsByWeek.entries()].sort((a, b) => a[0] - b[0]);
+
+  const topicSummary = sortedWeeks.map(([wk, tps]) => {
+    const topicNames = tps.map((t) => `${t.topic_name}${t.is_weak_area ? " [WEAK AREA]" : ""}`).join(", ");
+    return `Week ${wk}: ${topicNames}`;
+  }).join("\n");
+
+  const prompt = `You are a study plan assistant. Given the following course topics organized by week, generate a detailed study plan.
+
+Course: ${courseName}
+Study days per week: ${daysPerWeek} (${days.join(", ")})
+
+Topics by week:
+${topicSummary}
+
+For EACH week, generate:
+1. A focus topic title (combine the week's topics into a clear title)
+2. Exactly ${daysPerWeek} daily tasks, one for each day (${days.join(", ")}). Tasks should be specific, actionable study activities related to that week's topics.
+3. If any topic is marked [WEAK AREA], make the tasks for that week more intensive with extra review/practice, and mark which day indices (0-based) are weak area tasks.
+4. 2 specific study tips relevant to the week's topics.
+
+Respond ONLY with valid JSON in this exact format (no markdown, no backticks):
+[
+  {
+    "week": 1,
+    "topic": "Topic Title",
+    "hasWeakArea": false,
+    "weakTaskIndices": [],
+    "tasks": ["task for day 1", "task for day 2", ...],
+    "tips": ["tip 1", "tip 2"]
+  }
+]`;
+
+  try {
+    const { data, error } = await supabase.functions.invoke("claude-proxy", {
+      body: { prompt },
+    });
+
+    if (error) throw error;
+
+    const text = data?.text || "";
+    // Try to extract JSON from the response
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) throw new Error("No JSON found in response");
+
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    return parsed.map((w: any, i: number) => ({
+      week: w.week || i + 1,
+      topic: w.topic || `Week ${i + 1}`,
+      hasWeakArea: w.hasWeakArea || false,
+      tasks: days.map((day, di) => ({
+        day,
+        task: w.tasks?.[di] || `Study ${courseName}`,
+        isWeakArea: w.weakTaskIndices?.includes(di) || false,
+      })),
+      tips: w.tips || [],
+    }));
+  } catch (err) {
+    console.error("AI plan generation failed, using fallback:", err);
+    // Fallback: generate basic plan from real topic data
+    return sortedWeeks.map(([wk, tps], i) => {
+      const hasWeak = tps.some((t) => t.is_weak_area);
+      const topicTitle = tps.map((t) => t.topic_name).join(" & ");
+      return {
+        week: wk,
+        topic: topicTitle,
+        hasWeakArea: hasWeak,
+        tasks: days.map((day, di) => {
+          const taskTypes = [
+            `Read and review: ${tps[di % tps.length].topic_name}`,
+            `Practice problems on ${tps[di % tps.length].topic_name}`,
+            `Summarize key concepts: ${tps[di % tps.length].topic_name}`,
+            `Review lecture notes on ${tps[di % tps.length].topic_name}`,
+            `Create flashcards for ${tps[di % tps.length].topic_name}`,
+            `Do practice questions: ${tps[di % tps.length].topic_name}`,
+            `Self-test on ${tps[di % tps.length].topic_name}`,
+          ];
+          return {
+            day,
+            task: taskTypes[di % taskTypes.length],
+            isWeakArea: hasWeak && tps[di % tps.length].is_weak_area,
+          };
+        }),
+        tips: [
+          `Focus on understanding core concepts of ${tps[0].topic_name}.`,
+          hasWeak ? "Spend extra time on weak areas — try teaching the material to someone else." : "Review your notes regularly to reinforce retention.",
+        ],
+      };
+    });
+  }
 }
 
 function SetupScreen({ courses, onBuild }: { courses: CourseSetup[]; onBuild: (c: CourseSetup[]) => void }) {
@@ -287,6 +353,7 @@ export default function StudyPlan() {
   const { user } = useAuth();
   const [phase, setPhase] = useState<"setup" | "loading" | "plan">("setup");
   const [courses, setCourses] = useState<CourseSetup[]>([]);
+  const [allTopics, setAllTopics] = useState<TopicRow[]>([]);
   const [coursePlans, setCoursePlans] = useState<CoursePlan[]>([]);
   const [struggle, setStruggle] = useState("");
   const [loadingCourses, setLoadingCourses] = useState(true);
@@ -296,24 +363,36 @@ export default function StudyPlan() {
     const fetchCourses = async () => {
       const { data } = await supabase
         .from("topics")
-        .select("course_name")
+        .select("course_name, topic_name, week_number, is_weak_area")
         .eq("user_id", user.id);
-      const unique = [...new Set(data?.map(t => t.course_name) || [])];
+
+      const topics = (data || []) as TopicRow[];
+      setAllTopics(topics);
+
+      const unique = [...new Set(topics.map(t => t.course_name))];
       setCourses(unique.map(name => ({ courseName: name, daysPerWeek: 5 })));
       setLoadingCourses(false);
     };
     fetchCourses();
   }, [user]);
 
-  const handleBuild = (configs: CourseSetup[]) => {
+  const handleBuild = async (configs: CourseSetup[]) => {
     setPhase("loading");
-    setTimeout(() => {
-      setCoursePlans(configs.map(c => ({
-        courseName: c.courseName,
-        weeks: generateWeeks(c.daysPerWeek),
-      })));
+    try {
+      const plans = await Promise.all(
+        configs.map(async (c) => {
+          const courseTopics = allTopics.filter(t => t.course_name === c.courseName);
+          const weeks = await generatePlanWithAI(c.courseName, courseTopics, c.daysPerWeek);
+          return { courseName: c.courseName, weeks };
+        })
+      );
+      setCoursePlans(plans);
       setPhase("plan");
-    }, 2500);
+    } catch (err) {
+      console.error("Failed to build plans:", err);
+      toast.error("Failed to generate study plan. Please try again.");
+      setPhase("setup");
+    }
   };
 
   const handleSubmitStruggle = () => {
