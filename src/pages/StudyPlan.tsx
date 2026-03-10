@@ -258,7 +258,7 @@ export default function StudyPlan() {
   const { user } = useAuth();
   const [phase, setPhase] = useState<"setup" | "loading" | "plan">("setup");
   const [courses, setCourses] = useState<CourseSetup[]>([]);
-  const [weeks] = useState<WeekCard[]>(mockWeeks);
+  const [weeks, setWeeks] = useState<WeekCard[]>([]);
   const [struggle, setStruggle] = useState("");
   const [loadingCourses, setLoadingCourses] = useState(true);
 
