@@ -171,6 +171,7 @@ ${pdfText}`;
         }));
         const { error: aErr } = await supabase.from("assignments").insert(assignments);
         if (aErr) console.error("Insert assignments error:", aErr);
+        else console.log(`✅ Saved ${assignments.length} assignments for user ${user.id}`, assignments);
       }
 
       if (parsed.topics?.length) {
@@ -182,6 +183,7 @@ ${pdfText}`;
         }));
         const { error: tErr } = await supabase.from("topics").insert(topics);
         if (tErr) console.error("Insert topics error:", tErr);
+        else console.log(`✅ Saved ${topics.length} topics for user ${user.id}`, topics);
       }
 
       // 5. Display results
@@ -235,6 +237,7 @@ ${pdfText}`;
         return next;
       });
     } else {
+      console.log(`✅ Updated topic "${topic.topic_name}" is_weak_area=${isFlagging} for user ${user.id}`);
       toast({
         title: isFlagging ? "Flagged as weak area" : "Removed weak area flag",
         description: topic.topic_name,
