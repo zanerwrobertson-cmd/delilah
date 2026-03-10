@@ -22,6 +22,7 @@ interface WeekCard {
   tasks: DailyTask[];
   tips: string[];
   hasWeakArea?: boolean;
+  weakAreasAddressed?: string[];
 }
 
 interface CourseSetup {
@@ -41,137 +42,121 @@ interface TopicRow {
   course_name: string;
 }
 
+interface AssignmentRow {
+  assignment_name: string;
+  course_name: string;
+  type: string;
+  deadline: string | null;
+}
+
 const ALL_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 async function generatePlanWithAI(
   courseName: string,
   topics: TopicRow[],
+  assignments: AssignmentRow[],
+  weakAreas: TopicRow[],
+  learningStyle: string | null,
   daysPerWeek: number
 ): Promise<WeekCard[]> {
   const days = ALL_DAYS.slice(0, daysPerWeek);
-
-  // Group topics by week
-  const topicsByWeek = new Map<number, TopicRow[]>();
-  const unassigned: TopicRow[] = [];
-
-  topics.forEach((t) => {
-    if (t.week_number != null) {
-      const list = topicsByWeek.get(t.week_number) || [];
-      list.push(t);
-      topicsByWeek.set(t.week_number, list);
-    } else {
-      unassigned.push(t);
-    }
-  });
-
-  // If no week numbers, chunk topics evenly
-  if (topicsByWeek.size === 0 && unassigned.length > 0) {
-    const chunkSize = Math.max(1, Math.ceil(unassigned.length / Math.max(unassigned.length, 4)));
-    let weekNum = 1;
-    for (let i = 0; i < unassigned.length; i += chunkSize) {
-      topicsByWeek.set(weekNum, unassigned.slice(i, i + chunkSize));
-      weekNum++;
-    }
-  } else if (unassigned.length > 0) {
-    // Add unassigned to last week
-    const maxWeek = Math.max(...topicsByWeek.keys());
-    const list = topicsByWeek.get(maxWeek) || [];
-    list.push(...unassigned);
-    topicsByWeek.set(maxWeek, list);
-  }
-
-  const sortedWeeks = [...topicsByWeek.entries()].sort((a, b) => a[0] - b[0]);
-
-  const topicSummary = sortedWeeks.map(([wk, tps]) => {
-    const topicNames = tps.map((t) => `${t.topic_name}${t.is_weak_area ? " [WEAK AREA]" : ""}`).join(", ");
-    return `Week ${wk}: ${topicNames}`;
-  }).join("\n");
-
-  const prompt = `You are a study plan assistant. Given the following course topics organized by week, generate a detailed study plan.
-
-Course: ${courseName}
-Study days per week: ${daysPerWeek} (${days.join(", ")})
-
-Topics by week:
-${topicSummary}
-
-For EACH week, generate:
-1. A focus topic title (combine the week's topics into a clear title)
-2. Exactly ${daysPerWeek} daily tasks, one for each day (${days.join(", ")}). Tasks should be specific, actionable study activities related to that week's topics.
-3. If any topic is marked [WEAK AREA], make the tasks for that week more intensive with extra review/practice, and mark which day indices (0-based) are weak area tasks.
-4. 2 specific study tips relevant to the week's topics.
-
-Respond ONLY with valid JSON in this exact format (no markdown, no backticks):
-[
-  {
-    "week": 1,
-    "topic": "Topic Title",
-    "hasWeakArea": false,
-    "weakTaskIndices": [],
-    "tasks": ["task for day 1", "task for day 2", ...],
-    "tips": ["tip 1", "tip 2"]
-  }
-]`;
+  const courseAssignments = assignments.filter(a => a.course_name === courseName);
+  const courseWeakAreas = weakAreas.filter(w => w.course_name === courseName);
 
   try {
-    const { data, error } = await supabase.functions.invoke("claude-proxy", {
-      body: { prompt },
+    const { data, error } = await supabase.functions.invoke("generate-study-plan", {
+      body: {
+        courseName,
+        topics,
+        assignments: courseAssignments,
+        weakAreas: courseWeakAreas,
+        learningStyle,
+        daysPerWeek,
+        studyDays: days,
+      },
     });
 
     if (error) throw error;
 
-    const text = data?.text || "";
-    // Try to extract JSON from the response
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) throw new Error("No JSON found in response");
+    const weeks = data?.weeks;
+    if (!weeks || !Array.isArray(weeks)) throw new Error("Invalid response format");
 
-    const parsed = JSON.parse(jsonMatch[0]);
-
-    return parsed.map((w: any, i: number) => ({
-      week: w.week || i + 1,
-      topic: w.topic || `Week ${i + 1}`,
-      hasWeakArea: w.hasWeakArea || false,
+    return weeks.map((w: any, i: number) => ({
+      week: w.week_number || i + 1,
+      topic: w.focus_topic || `Week ${i + 1}`,
+      hasWeakArea: (w.weak_areas_addressed?.length || 0) > 0,
+      weakAreasAddressed: w.weak_areas_addressed || [],
       tasks: days.map((day, di) => ({
         day,
-        task: w.tasks?.[di] || `Study ${courseName}`,
-        isWeakArea: w.weakTaskIndices?.includes(di) || false,
+        task: w.daily_tasks?.[di] || `Study ${courseName}`,
+        isWeakArea: w.weak_task_indices?.includes(di) || false,
       })),
       tips: w.tips || [],
     }));
   } catch (err) {
     console.error("AI plan generation failed, using fallback:", err);
-    // Fallback: generate basic plan from real topic data
-    return sortedWeeks.map(([wk, tps], i) => {
+    toast.error("AI generation failed — using a basic plan instead.");
+
+    // Fallback from real topic data
+    const topicsByWeek = new Map<number, TopicRow[]>();
+    let weekCounter = 1;
+    topics.forEach((t) => {
+      const wk = t.week_number ?? weekCounter++;
+      const list = topicsByWeek.get(wk) || [];
+      list.push(t);
+      topicsByWeek.set(wk, list);
+    });
+
+    return [...topicsByWeek.entries()].sort((a, b) => a[0] - b[0]).map(([wk, tps]) => {
       const hasWeak = tps.some((t) => t.is_weak_area);
-      const topicTitle = tps.map((t) => t.topic_name).join(" & ");
       return {
         week: wk,
-        topic: topicTitle,
+        topic: tps.map((t) => t.topic_name).join(" & "),
         hasWeakArea: hasWeak,
         tasks: days.map((day, di) => {
+          const tp = tps[di % tps.length];
           const taskTypes = [
-            `Read and review: ${tps[di % tps.length].topic_name}`,
-            `Practice problems on ${tps[di % tps.length].topic_name}`,
-            `Summarize key concepts: ${tps[di % tps.length].topic_name}`,
-            `Review lecture notes on ${tps[di % tps.length].topic_name}`,
-            `Create flashcards for ${tps[di % tps.length].topic_name}`,
-            `Do practice questions: ${tps[di % tps.length].topic_name}`,
-            `Self-test on ${tps[di % tps.length].topic_name}`,
+            `Read and review: ${tp.topic_name}`,
+            `Practice problems on ${tp.topic_name}`,
+            `Summarize key concepts: ${tp.topic_name}`,
+            `Review lecture notes on ${tp.topic_name}`,
+            `Create flashcards for ${tp.topic_name}`,
+            `Do practice questions: ${tp.topic_name}`,
+            `Self-test on ${tp.topic_name}`,
           ];
-          return {
-            day,
-            task: taskTypes[di % taskTypes.length],
-            isWeakArea: hasWeak && tps[di % tps.length].is_weak_area,
-          };
+          return { day, task: taskTypes[di % taskTypes.length], isWeakArea: hasWeak && tp.is_weak_area };
         }),
         tips: [
           `Focus on understanding core concepts of ${tps[0].topic_name}.`,
-          hasWeak ? "Spend extra time on weak areas — try teaching the material to someone else." : "Review your notes regularly to reinforce retention.",
+          hasWeak ? "Spend extra time on weak areas." : "Review notes regularly.",
         ],
       };
     });
   }
 }
+
+async function saveToStudySessions(
+  userId: string,
+  coursePlans: CoursePlan[]
+) {
+  const rows = coursePlans.flatMap(plan =>
+    plan.weeks.map(week => ({
+      user_id: userId,
+      course_name: plan.courseName,
+      topic_name: week.topic,
+      weak_areas: week.weakAreasAddressed || [],
+    }))
+  );
+
+  if (rows.length === 0) return;
+
+  const { error } = await supabase.from("study_sessions").insert(rows);
+  if (error) {
+    console.error("Failed to save study sessions:", error);
+  }
+}
+
+// ── UI Components ──
 
 function SetupScreen({ courses, onBuild }: { courses: CourseSetup[]; onBuild: (c: CourseSetup[]) => void }) {
   const [configs, setConfigs] = useState<CourseSetup[]>(courses);
@@ -224,12 +209,7 @@ function SetupScreen({ courses, onBuild }: { courses: CourseSetup[]; onBuild: (c
         </Card>
       )}
 
-      <Button
-        size="lg"
-        className="w-full"
-        disabled={configs.length === 0}
-        onClick={() => onBuild(configs)}
-      >
+      <Button size="lg" className="w-full" disabled={configs.length === 0} onClick={() => onBuild(configs)}>
         <Sparkles className="h-4 w-4 mr-2" />
         Build My Study Plan
       </Button>
@@ -349,44 +329,64 @@ function PlanView({ coursePlans, struggle, setStruggle, onSubmitStruggle }: {
   );
 }
 
+// ── Main Component ──
+
 export default function StudyPlan() {
   const { user } = useAuth();
   const [phase, setPhase] = useState<"setup" | "loading" | "plan">("setup");
   const [courses, setCourses] = useState<CourseSetup[]>([]);
   const [allTopics, setAllTopics] = useState<TopicRow[]>([]);
+  const [allAssignments, setAllAssignments] = useState<AssignmentRow[]>([]);
+  const [learningStyle, setLearningStyle] = useState<string | null>(null);
   const [coursePlans, setCoursePlans] = useState<CoursePlan[]>([]);
   const [struggle, setStruggle] = useState("");
   const [loadingCourses, setLoadingCourses] = useState(true);
 
   useEffect(() => {
     if (!user) return;
-    const fetchCourses = async () => {
-      const { data } = await supabase
-        .from("topics")
-        .select("course_name, topic_name, week_number, is_weak_area")
-        .eq("user_id", user.id);
 
-      const topics = (data || []) as TopicRow[];
+    const fetchAll = async () => {
+      const [topicsRes, assignmentsRes, profileRes] = await Promise.all([
+        supabase.from("topics").select("course_name, topic_name, week_number, is_weak_area").eq("user_id", user.id),
+        supabase.from("assignments").select("assignment_name, course_name, type, deadline").eq("user_id", user.id),
+        supabase.from("profiles").select("learning_style").eq("user_id", user.id).single(),
+      ]);
+
+      const topics = (topicsRes.data || []) as TopicRow[];
       setAllTopics(topics);
+      setAllAssignments((assignmentsRes.data || []) as AssignmentRow[]);
+      setLearningStyle(profileRes.data?.learning_style || null);
 
       const unique = [...new Set(topics.map(t => t.course_name))];
       setCourses(unique.map(name => ({ courseName: name, daysPerWeek: 5 })));
       setLoadingCourses(false);
     };
-    fetchCourses();
+
+    fetchAll();
   }, [user]);
 
   const handleBuild = async (configs: CourseSetup[]) => {
+    if (!user) return;
     setPhase("loading");
+
     try {
+      const weakAreas = allTopics.filter(t => t.is_weak_area);
+
       const plans = await Promise.all(
         configs.map(async (c) => {
           const courseTopics = allTopics.filter(t => t.course_name === c.courseName);
-          const weeks = await generatePlanWithAI(c.courseName, courseTopics, c.daysPerWeek);
+          const weeks = await generatePlanWithAI(
+            c.courseName, courseTopics, allAssignments, weakAreas, learningStyle, c.daysPerWeek
+          );
           return { courseName: c.courseName, weeks };
         })
       );
+
       setCoursePlans(plans);
+
+      // Save to study_sessions
+      await saveToStudySessions(user.id, plans);
+
       setPhase("plan");
     } catch (err) {
       console.error("Failed to build plans:", err);
@@ -417,7 +417,7 @@ export default function StudyPlan() {
           <Loader2 className="relative h-12 w-12 animate-spin text-primary" />
         </div>
         <p className="font-display text-lg font-medium text-foreground">Delilah is building your study plan...</p>
-        <p className="text-sm text-muted-foreground">Analyzing your topics and creating a personalized schedule</p>
+        <p className="text-sm text-muted-foreground">Analyzing your topics, assignments, and weak areas</p>
       </div>
     );
   }
