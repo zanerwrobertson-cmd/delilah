@@ -27,52 +27,79 @@ interface CourseSetup {
   daysPerWeek: number;
 }
 
-const mockWeeks: WeekCard[] = [
+const ALL_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+const weekTemplates = [
   {
-    week: 1, topic: "A Real Intertemporal Model with Investment (Ch. 11)",
-    tasks: [
-      { day: "Mon", task: "Read Chapter 11, sections 11.1–11.3" },
-      { day: "Tue", task: "Solve end-of-chapter problems 1–5" },
-      { day: "Wed", task: "Review lecture notes on investment decisions" },
-      { day: "Thu", task: "Attend lecture & take active notes" },
-      { day: "Fri", task: "Summarize key equations and graphs" },
+    topic: "A Real Intertemporal Model with Investment (Ch. 11)",
+    allTasks: [
+      "Read Chapter 11, sections 11.1–11.3",
+      "Solve end-of-chapter problems 1–5",
+      "Review lecture notes on investment decisions",
+      "Attend lecture & take active notes",
+      "Summarize key equations and graphs",
+      "Re-derive key proofs from scratch",
+      "Do practice exam questions on Ch. 11",
     ],
     tips: ["Focus on the firm's investment decision and Tobin's q.", "Draw the competitive equilibrium diagram from memory."],
   },
   {
-    week: 2, topic: "Monetary Intertemporal Model (Ch. 12)", hasWeakArea: true,
-    tasks: [
-      { day: "Mon", task: "Read Chapter 12, sections 12.1–12.4" },
-      { day: "Tue", task: "Compare real vs monetary models side by side", isWeakArea: true },
-      { day: "Wed", task: "Practice problem set on money neutrality", isWeakArea: true },
-      { day: "Thu", task: "Attend lecture & review banking model" },
-      { day: "Fri", task: "Create flashcards for monetary policy tools" },
+    topic: "Monetary Intertemporal Model (Ch. 12)", hasWeakArea: true,
+    allTasks: [
+      "Read Chapter 12, sections 12.1–12.4",
+      "Compare real vs monetary models side by side",
+      "Practice problem set on money neutrality",
+      "Attend lecture & review banking model",
+      "Create flashcards for monetary policy tools",
+      "Review money demand derivations",
+      "Summarize chapter in your own words",
     ],
+    weakTaskIndices: [1, 2],
     tips: ["Understand the difference between money neutrality and superneutrality.", "Practice shifting curves when monetary policy changes."],
   },
   {
-    week: 3, topic: "Business Cycles (Ch. 13)",
-    tasks: [
-      { day: "Mon", task: "Read Chapter 13, focus on RBC theory" },
-      { day: "Tue", task: "List key business cycle facts from the data" },
-      { day: "Wed", task: "Work through RBC model problem set" },
-      { day: "Thu", task: "Attend lecture on Keynesian vs RBC" },
-      { day: "Fri", task: "Quiz yourself on business cycle definitions" },
+    topic: "Business Cycles (Ch. 13)",
+    allTasks: [
+      "Read Chapter 13, focus on RBC theory",
+      "List key business cycle facts from the data",
+      "Work through RBC model problem set",
+      "Attend lecture on Keynesian vs RBC",
+      "Quiz yourself on business cycle definitions",
+      "Compare impulse response functions",
+      "Write summary notes on Solow residuals",
     ],
     tips: ["Know the key comovements: output, consumption, investment, employment.", "Be ready to compare RBC and Keynesian explanations on an exam."],
   },
   {
-    week: 4, topic: "Inflation: Phillips Curves & Neo-Fisherism (Ch. 14)", hasWeakArea: true,
-    tasks: [
-      { day: "Mon", task: "Read Chapter 14 on Phillips Curve history" },
-      { day: "Tue", task: "Solve problems on expectations-augmented Phillips Curve", isWeakArea: true },
-      { day: "Wed", task: "Review Neo-Fisherian arguments" },
-      { day: "Thu", task: "Attend lecture & compare inflation models" },
-      { day: "Fri", task: "Start midterm 1 review — Chapters 11–14" },
+    topic: "Inflation: Phillips Curves & Neo-Fisherism (Ch. 14)", hasWeakArea: true,
+    allTasks: [
+      "Read Chapter 14 on Phillips Curve history",
+      "Solve problems on expectations-augmented Phillips Curve",
+      "Review Neo-Fisherian arguments",
+      "Attend lecture & compare inflation models",
+      "Start midterm 1 review — Chapters 11–14",
+      "Graph Phillips Curve shifts from memory",
+      "Do timed practice problems on inflation",
     ],
+    weakTaskIndices: [1],
     tips: ["Understand why the original Phillips Curve broke down in the 1970s.", "Neo-Fisherism is a likely exam question — know the core argument."],
   },
 ];
+
+function generateWeeks(daysPerWeek: number): WeekCard[] {
+  const days = ALL_DAYS.slice(0, daysPerWeek);
+  return weekTemplates.map((tmpl, i) => ({
+    week: i + 1,
+    topic: tmpl.topic,
+    hasWeakArea: tmpl.hasWeakArea,
+    tasks: days.map((day, di) => ({
+      day,
+      task: tmpl.allTasks[di % tmpl.allTasks.length],
+      isWeakArea: tmpl.weakTaskIndices?.includes(di),
+    })),
+    tips: tmpl.tips,
+  }));
+}
 
 function SetupScreen({ courses, onBuild }: { courses: CourseSetup[]; onBuild: (c: CourseSetup[]) => void }) {
   const [configs, setConfigs] = useState<CourseSetup[]>(courses);
