@@ -171,6 +171,7 @@ ${pdfText}`;
         }));
         const { error: aErr } = await supabase.from("assignments").insert(assignments);
         if (aErr) console.error("Insert assignments error:", aErr);
+        else console.log(`✅ Saved ${assignments.length} assignments for user ${user.id}`, assignments);
       }
 
       if (parsed.topics?.length) {
