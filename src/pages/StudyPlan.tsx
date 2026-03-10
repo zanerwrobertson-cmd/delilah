@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Loader2, CalendarDays, Lightbulb, BookOpen, SendHorizonal, CheckCircle2, AlertTriangle, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -25,6 +26,11 @@ interface WeekCard {
 interface CourseSetup {
   courseName: string;
   daysPerWeek: number;
+}
+
+interface CoursePlan {
+  courseName: string;
+  weeks: WeekCard[];
 }
 
 const ALL_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -165,8 +171,68 @@ function SetupScreen({ courses, onBuild }: { courses: CourseSetup[]; onBuild: (c
   );
 }
 
-function PlanView({ weeks, struggle, setStruggle, onSubmitStruggle }: {
-  weeks: WeekCard[]; struggle: string; setStruggle: (s: string) => void; onSubmitStruggle: () => void;
+function CoursePlanView({ plan }: { plan: CoursePlan }) {
+  return (
+    <div className="space-y-6">
+      {plan.weeks.map((week) => (
+        <Card key={week.week} className="overflow-hidden border-border bg-card">
+          <div className="flex items-center gap-3 border-b border-border bg-secondary/30 px-6 py-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary font-bold text-sm">
+              {week.week}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="font-display text-base font-semibold text-foreground truncate">Week {week.week}</h2>
+              <p className="text-sm text-muted-foreground truncate">{week.topic}</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {week.hasWeakArea && (
+                <Badge variant="outline" className="border-destructive/30 text-destructive">
+                  <AlertTriangle className="mr-1 h-3 w-3" /> Weak Area
+                </Badge>
+              )}
+              <Badge variant="outline" className="border-primary/30 text-primary">
+                <CalendarDays className="mr-1 h-3 w-3" /> {week.tasks.length} tasks
+              </Badge>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-5">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <CheckCircle2 className="h-4 w-4 text-primary" /> Daily Tasks
+              </div>
+              <div className="space-y-1.5">
+                {week.tasks.map((task, i) => (
+                  <div key={i} className={`flex items-start gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${task.isWeakArea ? "bg-destructive/10 border border-destructive/20" : "hover:bg-secondary/40"}`}>
+                    <span className={`mt-0.5 w-9 shrink-0 rounded px-1.5 py-0.5 text-center text-xs font-medium ${task.isWeakArea ? "bg-destructive/20 text-destructive" : "bg-secondary text-muted-foreground"}`}>
+                      {task.day}
+                    </span>
+                    <span className="text-foreground/90">{task.task}</span>
+                    {task.isWeakArea && <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <Lightbulb className="h-4 w-4 text-yellow-500" /> Tips from Delilah
+              </div>
+              <div className="rounded-lg border border-border bg-secondary/20 p-4 space-y-2">
+                {week.tips.map((tip, i) => (
+                  <p key={i} className="text-sm text-muted-foreground leading-relaxed">• {tip}</p>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function PlanView({ coursePlans, struggle, setStruggle, onSubmitStruggle }: {
+  coursePlans: CoursePlan[]; struggle: string; setStruggle: (s: string) => void; onSubmitStruggle: () => void;
 }) {
   return (
     <div className="space-y-8 max-w-4xl">
@@ -175,61 +241,24 @@ function PlanView({ weeks, struggle, setStruggle, onSubmitStruggle }: {
         <p className="mt-1 text-muted-foreground">Your personalized weekly breakdown from Delilah.</p>
       </div>
 
-      <div className="space-y-6">
-        {weeks.map((week) => (
-          <Card key={week.week} className="overflow-hidden border-border bg-card">
-            <div className="flex items-center gap-3 border-b border-border bg-secondary/30 px-6 py-4">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary font-bold text-sm">
-                {week.week}
-              </div>
-              <div className="flex-1 min-w-0">
-                <h2 className="font-display text-base font-semibold text-foreground truncate">Week {week.week}</h2>
-                <p className="text-sm text-muted-foreground truncate">{week.topic}</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {week.hasWeakArea && (
-                  <Badge variant="outline" className="border-destructive/30 text-destructive">
-                    <AlertTriangle className="mr-1 h-3 w-3" /> Weak Area
-                  </Badge>
-                )}
-                <Badge variant="outline" className="border-primary/30 text-primary">
-                  <CalendarDays className="mr-1 h-3 w-3" /> {week.tasks.length} tasks
-                </Badge>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-5">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <CheckCircle2 className="h-4 w-4 text-primary" /> Daily Tasks
-                </div>
-                <div className="space-y-1.5">
-                  {week.tasks.map((task, i) => (
-                    <div key={i} className={`flex items-start gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${task.isWeakArea ? "bg-destructive/10 border border-destructive/20" : "hover:bg-secondary/40"}`}>
-                      <span className={`mt-0.5 w-9 shrink-0 rounded px-1.5 py-0.5 text-center text-xs font-medium ${task.isWeakArea ? "bg-destructive/20 text-destructive" : "bg-secondary text-muted-foreground"}`}>
-                        {task.day}
-                      </span>
-                      <span className="text-foreground/90">{task.task}</span>
-                      {task.isWeakArea && <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <Lightbulb className="h-4 w-4 text-yellow-500" /> Tips from Delilah
-                </div>
-                <div className="rounded-lg border border-border bg-secondary/20 p-4 space-y-2">
-                  {week.tips.map((tip, i) => (
-                    <p key={i} className="text-sm text-muted-foreground leading-relaxed">• {tip}</p>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
+      {coursePlans.length === 1 ? (
+        <CoursePlanView plan={coursePlans[0]} />
+      ) : (
+        <Tabs defaultValue={coursePlans[0]?.courseName} className="w-full">
+          <TabsList className="w-full flex">
+            {coursePlans.map((cp) => (
+              <TabsTrigger key={cp.courseName} value={cp.courseName} className="flex-1 truncate">
+                {cp.courseName}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {coursePlans.map((cp) => (
+            <TabsContent key={cp.courseName} value={cp.courseName}>
+              <CoursePlanView plan={cp} />
+            </TabsContent>
+          ))}
+        </Tabs>
+      )}
 
       <Card className="border-border bg-card p-6">
         <div className="flex items-center gap-2 mb-4">
@@ -258,7 +287,7 @@ export default function StudyPlan() {
   const { user } = useAuth();
   const [phase, setPhase] = useState<"setup" | "loading" | "plan">("setup");
   const [courses, setCourses] = useState<CourseSetup[]>([]);
-  const [weeks, setWeeks] = useState<WeekCard[]>([]);
+  const [coursePlans, setCoursePlans] = useState<CoursePlan[]>([]);
   const [struggle, setStruggle] = useState("");
   const [loadingCourses, setLoadingCourses] = useState(true);
 
@@ -278,9 +307,11 @@ export default function StudyPlan() {
 
   const handleBuild = (configs: CourseSetup[]) => {
     setPhase("loading");
-    const daysPerWeek = configs[0]?.daysPerWeek ?? 5;
     setTimeout(() => {
-      setWeeks(generateWeeks(daysPerWeek));
+      setCoursePlans(configs.map(c => ({
+        courseName: c.courseName,
+        weeks: generateWeeks(c.daysPerWeek),
+      })));
       setPhase("plan");
     }, 2500);
   };
@@ -316,5 +347,5 @@ export default function StudyPlan() {
     return <SetupScreen courses={courses} onBuild={handleBuild} />;
   }
 
-  return <PlanView weeks={weeks} struggle={struggle} setStruggle={setStruggle} onSubmitStruggle={handleSubmitStruggle} />;
+  return <PlanView coursePlans={coursePlans} struggle={struggle} setStruggle={setStruggle} onSubmitStruggle={handleSubmitStruggle} />;
 }
