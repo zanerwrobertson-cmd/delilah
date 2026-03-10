@@ -461,7 +461,9 @@ export default function StudyPlan() {
           <div className="absolute inset-0 rounded-full bg-primary/20 blur-xl animate-pulse" />
           <Loader2 className="relative h-12 w-12 animate-spin text-primary" />
         </div>
-        <p className="font-display text-lg font-medium text-foreground">Delilah is building your study plan...</p>
+        <p className="font-display text-lg font-medium text-foreground">
+          {coursePlans.length > 0 ? "Delilah is updating your plan..." : "Delilah is building your study plan..."}
+        </p>
         <p className="text-sm text-muted-foreground">Analyzing your topics, assignments, and weak areas</p>
       </div>
     );
