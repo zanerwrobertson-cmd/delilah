@@ -395,10 +395,55 @@ export default function StudyPlan() {
     }
   };
 
-  const handleSubmitStruggle = () => {
-    if (!struggle.trim()) return;
+  const handleSubmitStruggle = async () => {
+    if (!struggle.trim() || !user) return;
     setPhase("loading");
-    setTimeout(() => { setPhase("plan"); setStruggle(""); }, 2000);
+
+    try {
+      // Determine which course tab is active; default to first
+      const targetCourse = coursePlans[0]?.courseName;
+      if (!targetCourse) { setPhase("plan"); return; }
+
+      // Save struggle as a new weak-area topic
+      const { error: insertErr } = await supabase.from("topics").insert({
+        user_id: user.id,
+        course_name: targetCourse,
+        topic_name: struggle.trim(),
+        is_weak_area: true,
+      });
+      if (insertErr) console.error("Failed to save struggle topic:", insertErr);
+
+      // Re-fetch topics so the new weak area is included
+      const { data: freshTopics } = await supabase
+        .from("topics")
+        .select("course_name, topic_name, week_number, is_weak_area")
+        .eq("user_id", user.id);
+      const topics = (freshTopics || []) as TopicRow[];
+      setAllTopics(topics);
+
+      // Regenerate plans for all courses
+      const weakAreas = topics.filter(t => t.is_weak_area);
+      const plans = await Promise.all(
+        coursePlans.map(async (cp) => {
+          const courseTopics = topics.filter(t => t.course_name === cp.courseName);
+          const config = courses.find(c => c.courseName === cp.courseName);
+          const weeks = await generatePlanWithAI(
+            cp.courseName, courseTopics, allAssignments, weakAreas, learningStyle, config?.daysPerWeek ?? 5
+          );
+          return { courseName: cp.courseName, weeks };
+        })
+      );
+
+      setCoursePlans(plans);
+      await saveToStudySessions(user.id, plans);
+      toast.success("Delilah updated your plan with the new focus area!");
+      setStruggle("");
+      setPhase("plan");
+    } catch (err) {
+      console.error("Failed to update plan:", err);
+      toast.error("Failed to update your plan. Please try again.");
+      setPhase("plan");
+    }
   };
 
   if (loadingCourses) {
@@ -416,7 +461,9 @@ export default function StudyPlan() {
           <div className="absolute inset-0 rounded-full bg-primary/20 blur-xl animate-pulse" />
           <Loader2 className="relative h-12 w-12 animate-spin text-primary" />
         </div>
-        <p className="font-display text-lg font-medium text-foreground">Delilah is building your study plan...</p>
+        <p className="font-display text-lg font-medium text-foreground">
+          {coursePlans.length > 0 ? "Delilah is updating your plan..." : "Delilah is building your study plan..."}
+        </p>
         <p className="text-sm text-muted-foreground">Analyzing your topics, assignments, and weak areas</p>
       </div>
     );
