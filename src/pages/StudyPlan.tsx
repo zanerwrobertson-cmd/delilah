@@ -276,9 +276,13 @@ export default function StudyPlan() {
     fetchCourses();
   }, [user]);
 
-  const handleBuild = (_configs: CourseSetup[]) => {
+  const handleBuild = (configs: CourseSetup[]) => {
     setPhase("loading");
-    setTimeout(() => setPhase("plan"), 2500);
+    const daysPerWeek = configs[0]?.daysPerWeek ?? 5;
+    setTimeout(() => {
+      setWeeks(generateWeeks(daysPerWeek));
+      setPhase("plan");
+    }, 2500);
   };
 
   const handleSubmitStruggle = () => {
