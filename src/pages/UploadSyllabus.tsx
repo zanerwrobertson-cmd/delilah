@@ -183,6 +183,7 @@ ${pdfText}`;
         }));
         const { error: tErr } = await supabase.from("topics").insert(topics);
         if (tErr) console.error("Insert topics error:", tErr);
+        else console.log(`✅ Saved ${topics.length} topics for user ${user.id}`, topics);
       }
 
       // 5. Display results
