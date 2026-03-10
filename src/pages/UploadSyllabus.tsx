@@ -237,6 +237,7 @@ ${pdfText}`;
         return next;
       });
     } else {
+      console.log(`✅ Updated topic "${topic.topic_name}" is_weak_area=${isFlagging} for user ${user.id}`);
       toast({
         title: isFlagging ? "Flagged as weak area" : "Removed weak area flag",
         description: topic.topic_name,
