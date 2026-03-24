@@ -158,11 +158,20 @@ async function saveToStudySessions(
 
 // ── UI Components ──
 
-function SetupScreen({ courses, onBuild }: { courses: CourseSetup[]; onBuild: (c: CourseSetup[]) => void }) {
+function SetupScreen({ courses, onBuild, onDelete }: { courses: CourseSetup[]; onBuild: (c: CourseSetup[]) => void; onDelete: (courseName: string) => void }) {
   const [configs, setConfigs] = useState<CourseSetup[]>(courses);
+
+  useEffect(() => {
+    setConfigs(courses);
+  }, [courses]);
 
   const updateDays = (index: number, days: number) => {
     setConfigs(prev => prev.map((c, i) => i === index ? { ...c, daysPerWeek: days } : c));
+  };
+
+  const handleDelete = (courseName: string) => {
+    setConfigs(prev => prev.filter(c => c.courseName !== courseName));
+    onDelete(courseName);
   };
 
   return (
@@ -179,7 +188,15 @@ function SetupScreen({ courses, onBuild }: { courses: CourseSetup[]; onBuild: (c
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/15">
                 <BookOpen className="h-5 w-5 text-primary" />
               </div>
-              <h2 className="font-display text-lg font-semibold text-foreground">{course.courseName}</h2>
+              <h2 className="font-display text-lg font-semibold text-foreground flex-1">{course.courseName}</h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleDelete(course.courseName)}
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between text-sm">
