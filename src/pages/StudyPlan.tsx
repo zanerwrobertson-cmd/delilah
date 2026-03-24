@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Loader2, CalendarDays, Lightbulb, BookOpen, SendHorizonal, CheckCircle2, AlertTriangle, Sparkles } from "lucide-react";
+import { Loader2, CalendarDays, Lightbulb, BookOpen, SendHorizonal, CheckCircle2, AlertTriangle, Sparkles, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -158,11 +158,20 @@ async function saveToStudySessions(
 
 // ── UI Components ──
 
-function SetupScreen({ courses, onBuild }: { courses: CourseSetup[]; onBuild: (c: CourseSetup[]) => void }) {
+function SetupScreen({ courses, onBuild, onDelete }: { courses: CourseSetup[]; onBuild: (c: CourseSetup[]) => void; onDelete: (courseName: string) => void }) {
   const [configs, setConfigs] = useState<CourseSetup[]>(courses);
+
+  useEffect(() => {
+    setConfigs(courses);
+  }, [courses]);
 
   const updateDays = (index: number, days: number) => {
     setConfigs(prev => prev.map((c, i) => i === index ? { ...c, daysPerWeek: days } : c));
+  };
+
+  const handleDelete = (courseName: string) => {
+    setConfigs(prev => prev.filter(c => c.courseName !== courseName));
+    onDelete(courseName);
   };
 
   return (
@@ -179,7 +188,15 @@ function SetupScreen({ courses, onBuild }: { courses: CourseSetup[]; onBuild: (c
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/15">
                 <BookOpen className="h-5 w-5 text-primary" />
               </div>
-              <h2 className="font-display text-lg font-semibold text-foreground">{course.courseName}</h2>
+              <h2 className="font-display text-lg font-semibold text-foreground flex-1">{course.courseName}</h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleDelete(course.courseName)}
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between text-sm">
@@ -469,8 +486,13 @@ export default function StudyPlan() {
     );
   }
 
+  const handleDeleteCourse = (courseName: string) => {
+    setCourses(prev => prev.filter(c => c.courseName !== courseName));
+    toast.success(`Removed "${courseName}" from your study plan.`);
+  };
+
   if (phase === "setup") {
-    return <SetupScreen courses={courses} onBuild={handleBuild} />;
+    return <SetupScreen courses={courses} onBuild={handleBuild} onDelete={handleDeleteCourse} />;
   }
 
   return <PlanView coursePlans={coursePlans} struggle={struggle} setStruggle={setStruggle} onSubmitStruggle={handleSubmitStruggle} />;
