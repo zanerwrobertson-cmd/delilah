@@ -160,30 +160,41 @@ ${pdfText}`;
         return;
       }
 
-      // 4. Save to Supabase
+      // 4. Save to Supabase — get fresh user from auth
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+      if (authError || !authUser) {
+        console.error("Auth error - cannot save:", authError);
+        toast({ title: "Auth error", description: "Please log in again to save data.", variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+      console.log("✅ Authenticated user:", authUser.id);
+
       if (parsed.assignments?.length) {
-        const assignments = parsed.assignments.map((a) => ({
-          user_id: user.id,
-          course_name: courseName.trim(),
-          assignment_name: a.assignment_name,
-          deadline: a.deadline || null,
-          type: a.type || "assignment",
-        }));
-        const { error: aErr } = await supabase.from("assignments").insert(assignments);
-        if (aErr) console.error("Insert assignments error:", aErr);
-        else console.log(`✅ Saved ${assignments.length} assignments for user ${user.id}`, assignments);
+        for (const a of parsed.assignments) {
+          const { error: aErr } = await supabase.from("assignments").insert({
+            user_id: authUser.id,
+            course_name: courseName.trim(),
+            assignment_name: a.assignment_name,
+            deadline: a.deadline || null,
+            type: a.type || "assignment",
+          });
+          if (aErr) console.error("Insert assignment failed:", aErr, a);
+          else console.log("✅ Saved assignment:", a.assignment_name);
+        }
       }
 
       if (parsed.topics?.length) {
-        const topics = parsed.topics.map((t) => ({
-          user_id: user.id,
-          course_name: courseName.trim(),
-          week_number: t.week_number || null,
-          topic_name: t.topic_name,
-        }));
-        const { error: tErr } = await supabase.from("topics").insert(topics);
-        if (tErr) console.error("Insert topics error:", tErr);
-        else console.log(`✅ Saved ${topics.length} topics for user ${user.id}`, topics);
+        for (const t of parsed.topics) {
+          const { error: tErr } = await supabase.from("topics").insert({
+            user_id: authUser.id,
+            course_name: courseName.trim(),
+            week_number: t.week_number || null,
+            topic_name: t.topic_name,
+          });
+          if (tErr) console.error("Insert topic failed:", tErr, t);
+          else console.log("✅ Saved topic:", t.topic_name);
+        }
       }
 
       // 5. Display results
