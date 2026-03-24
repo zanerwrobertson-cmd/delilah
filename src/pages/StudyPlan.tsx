@@ -486,8 +486,13 @@ export default function StudyPlan() {
     );
   }
 
+  const handleDeleteCourse = (courseName: string) => {
+    setCourses(prev => prev.filter(c => c.courseName !== courseName));
+    toast.success(`Removed "${courseName}" from your study plan.`);
+  };
+
   if (phase === "setup") {
-    return <SetupScreen courses={courses} onBuild={handleBuild} />;
+    return <SetupScreen courses={courses} onBuild={handleBuild} onDelete={handleDeleteCourse} />;
   }
 
   return <PlanView coursePlans={coursePlans} struggle={struggle} setStruggle={setStruggle} onSubmitStruggle={handleSubmitStruggle} />;
