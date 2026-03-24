@@ -7,10 +7,21 @@ import { CourseSelector } from "@/components/quiz/CourseSelector";
 import { ModeSelector } from "@/components/quiz/ModeSelector";
 import { QuizInterface } from "@/components/quiz/QuizInterface";
 import { QuizResults } from "@/components/quiz/QuizResults";
+import { SavedQuizzes } from "@/components/quiz/SavedQuizzes";
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 type Phase = "select-course" | "select-mode" | "loading" | "quiz" | "results";
+
+interface SavedQuiz {
+  id: string;
+  course: string;
+  mode: string;
+  current_index: number;
+  questions: any[];
+  user_answers: any[];
+  updated_at: string;
+}
 
 export default function QuizMe() {
   const { user } = useAuth();
@@ -24,9 +35,15 @@ export default function QuizMe() {
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [result, setResult] = useState<QuizResult | null>(null);
 
-  // Fetch courses from topics table (populated by syllabus upload)
+  const [savedQuizzes, setSavedQuizzes] = useState<SavedQuiz[]>([]);
+  const [resumeIndex, setResumeIndex] = useState(0);
+  const [resumeAnswers, setResumeAnswers] = useState<(number | null)[] | undefined>();
+  const [activeProgressId, setActiveProgressId] = useState<string | null>(null);
+
+  // Fetch courses and saved quizzes
   useEffect(() => {
     if (!user) return;
+
     supabase
       .from("topics")
       .select("course_name")
@@ -36,14 +53,28 @@ export default function QuizMe() {
         setCourses(unique);
         setLoadingCourses(false);
       });
+
+    fetchSavedQuizzes();
   }, [user]);
+
+  const fetchSavedQuizzes = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("quiz_progress")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false });
+    setSavedQuizzes((data as SavedQuiz[]) || []);
+  };
 
   const startQuiz = useCallback(async () => {
     if (!selectedCourse || !selectedMode || !user) return;
     setPhase("loading");
+    setResumeIndex(0);
+    setResumeAnswers(undefined);
+    setActiveProgressId(null);
 
     try {
-      // Fetch course topics, weak areas, and learning style in parallel
       const [topicsRes, profileRes] = await Promise.all([
         supabase
           .from("topics")
@@ -63,26 +94,13 @@ export default function QuizMe() {
         .map((t) => t.topic_name);
       const learningStyle = profileRes.data?.learning_style || "standard";
 
-      console.log("Generating quiz with:", { selectedCourse, topics, weakAreas, learningStyle, mode: selectedMode });
-
-      // Call Claude via edge function
       const { data, error } = await supabase.functions.invoke("generate-quiz", {
-        body: {
-          courseName: selectedCourse,
-          topics,
-          weakAreas,
-          learningStyle,
-          mode: selectedMode,
-        },
+        body: { courseName: selectedCourse, topics, weakAreas, learningStyle, mode: selectedMode },
       });
 
       if (error) throw error;
+      if (!data?.questions || !Array.isArray(data.questions)) throw new Error("Invalid response from AI");
 
-      if (!data?.questions || !Array.isArray(data.questions)) {
-        throw new Error("Invalid response from AI");
-      }
-
-      // Map Claude's response to QuizQuestion format
       let qs: QuizQuestion[] = data.questions.map((q: any, i: number) => ({
         id: i + 1,
         question: q.question,
@@ -93,11 +111,8 @@ export default function QuizMe() {
         difficulty: q.difficulty || "medium",
       }));
 
-      if (selectedMode === "exam-prep") {
-        qs = sortByDifficulty(qs);
-      }
+      if (selectedMode === "exam-prep") qs = sortByDifficulty(qs);
 
-      console.log("Quiz questions generated:", qs.length);
       setQuestions(qs);
       setPhase("quiz");
     } catch (err: any) {
@@ -106,6 +121,54 @@ export default function QuizMe() {
       setPhase("select-mode");
     }
   }, [selectedCourse, selectedMode, user]);
+
+  const handleQuizExit = async (currentIndex: number, userAnswers: (number | null)[]) => {
+    if (!user || !selectedCourse || !selectedMode) return;
+
+    try {
+      if (activeProgressId) {
+        await supabase.from("quiz_progress").update({
+          current_index: currentIndex,
+          user_answers: userAnswers as any,
+          updated_at: new Date().toISOString(),
+        }).eq("id", activeProgressId);
+      } else {
+        await supabase.from("quiz_progress").insert({
+          user_id: user.id,
+          course: selectedCourse,
+          mode: selectedMode,
+          questions: questions as any,
+          user_answers: userAnswers as any,
+          current_index: currentIndex,
+        });
+      }
+
+      toast.success("Quiz progress saved!");
+      setActiveProgressId(null);
+      await fetchSavedQuizzes();
+      setPhase("select-course");
+      setSelectedCourse(null);
+      setSelectedMode(null);
+    } catch {
+      toast.error("Failed to save progress.");
+    }
+  };
+
+  const handleResume = (quiz: SavedQuiz) => {
+    setQuestions(quiz.questions as QuizQuestion[]);
+    setSelectedCourse(quiz.course);
+    setSelectedMode(quiz.mode as QuizMode);
+    setResumeIndex(quiz.current_index);
+    setResumeAnswers(quiz.user_answers as (number | null)[]);
+    setActiveProgressId(quiz.id);
+    setPhase("quiz");
+  };
+
+  const handleDeleteSaved = async (id: string) => {
+    await supabase.from("quiz_progress").delete().eq("id", id);
+    toast.success("Saved quiz deleted.");
+    await fetchSavedQuizzes();
+  };
 
   const handleQuizComplete = async (quizResult: QuizResult) => {
     setResult(quizResult);
@@ -121,6 +184,13 @@ export default function QuizMe() {
         weak_areas: quizResult.weakAreas,
         time_taken_seconds: quizResult.timeTakenSeconds,
       });
+
+      // Clean up saved progress if it was a resumed quiz
+      if (activeProgressId) {
+        await supabase.from("quiz_progress").delete().eq("id", activeProgressId);
+        setActiveProgressId(null);
+        await fetchSavedQuizzes();
+      }
     }
   };
 
@@ -128,6 +198,9 @@ export default function QuizMe() {
     setPhase("select-mode");
     setSelectedMode(null);
     setResult(null);
+    setResumeIndex(0);
+    setResumeAnswers(undefined);
+    setActiveProgressId(null);
   };
 
   const handleBackToCourses = () => {
@@ -157,6 +230,9 @@ export default function QuizMe() {
         mode={selectedMode}
         course={selectedCourse}
         onComplete={handleQuizComplete}
+        onExit={handleQuizExit}
+        initialIndex={resumeIndex}
+        initialAnswers={resumeAnswers}
       />
     );
   }
@@ -175,6 +251,14 @@ export default function QuizMe() {
   return (
     <div className="space-y-8 max-w-2xl mx-auto">
       <h1 className="font-display text-3xl font-bold text-foreground">Quiz Me</h1>
+
+      {savedQuizzes.length > 0 && phase === "select-course" && (
+        <SavedQuizzes
+          quizzes={savedQuizzes}
+          onResume={handleResume}
+          onDelete={handleDeleteSaved}
+        />
+      )}
 
       {phase === "select-course" && (
         <CourseSelector
