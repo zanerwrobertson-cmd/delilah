@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { generateQuestions, sortByDifficulty } from "@/lib/quiz-generator";
+import { sortByDifficulty } from "@/lib/quiz-generator";
 import type { QuizQuestion, QuizMode, QuizResult } from "@/lib/quiz-types";
 import { CourseSelector } from "@/components/quiz/CourseSelector";
 import { ModeSelector } from "@/components/quiz/ModeSelector";
 import { QuizInterface } from "@/components/quiz/QuizInterface";
 import { QuizResults } from "@/components/quiz/QuizResults";
+import { Loader2, Sparkles } from "lucide-react";
+import { toast } from "sonner";
 
-type Phase = "select-course" | "select-mode" | "quiz" | "results";
+type Phase = "select-course" | "select-mode" | "loading" | "quiz" | "results";
 
 export default function QuizMe() {
   const { user } = useAuth();
@@ -39,21 +41,79 @@ export default function QuizMe() {
       });
   }, [user]);
 
-  const startQuiz = useCallback(() => {
-    if (!selectedCourse || !selectedMode) return;
-    let qs = generateQuestions(selectedCourse, 10);
-    if (selectedMode === "exam-prep") {
-      qs = sortByDifficulty(qs);
+  const startQuiz = useCallback(async () => {
+    if (!selectedCourse || !selectedMode || !user) return;
+    setPhase("loading");
+
+    try {
+      // Fetch course topics, weak areas, and learning style in parallel
+      const [topicsRes, profileRes] = await Promise.all([
+        supabase
+          .from("topics")
+          .select("topic_name, is_weak_area")
+          .eq("user_id", user.id)
+          .eq("course_name", selectedCourse),
+        supabase
+          .from("profiles")
+          .select("learning_style")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+      ]);
+
+      const topics = (topicsRes.data || []).map((t) => t.topic_name);
+      const weakAreas = (topicsRes.data || [])
+        .filter((t) => t.is_weak_area)
+        .map((t) => t.topic_name);
+      const learningStyle = profileRes.data?.learning_style || "standard";
+
+      console.log("Generating quiz with:", { selectedCourse, topics, weakAreas, learningStyle, mode: selectedMode });
+
+      // Call Claude via edge function
+      const { data, error } = await supabase.functions.invoke("generate-quiz", {
+        body: {
+          courseName: selectedCourse,
+          topics,
+          weakAreas,
+          learningStyle,
+          mode: selectedMode,
+        },
+      });
+
+      if (error) throw error;
+
+      if (!data?.questions || !Array.isArray(data.questions)) {
+        throw new Error("Invalid response from AI");
+      }
+
+      // Map Claude's response to QuizQuestion format
+      let qs: QuizQuestion[] = data.questions.map((q: any, i: number) => ({
+        id: i + 1,
+        question: q.question,
+        options: q.options,
+        correctIndex: typeof q.correctIndex === "number" ? q.correctIndex : 0,
+        hint: q.hint || "Think carefully about the key concepts.",
+        topic: q.topic || selectedCourse,
+        difficulty: q.difficulty || "medium",
+      }));
+
+      if (selectedMode === "exam-prep") {
+        qs = sortByDifficulty(qs);
+      }
+
+      console.log("Quiz questions generated:", qs.length);
+      setQuestions(qs);
+      setPhase("quiz");
+    } catch (err: any) {
+      console.error("Failed to generate quiz:", err);
+      toast.error("Failed to generate quiz. Please try again.");
+      setPhase("select-mode");
     }
-    setQuestions(qs);
-    setPhase("quiz");
-  }, [selectedCourse, selectedMode]);
+  }, [selectedCourse, selectedMode, user]);
 
   const handleQuizComplete = async (quizResult: QuizResult) => {
     setResult(quizResult);
     setPhase("results");
 
-    // Save to Supabase
     if (user) {
       await supabase.from("quiz_results").insert({
         user_id: user.id,
@@ -79,6 +139,19 @@ export default function QuizMe() {
     setSelectedMode(null);
     setResult(null);
   };
+
+  if (phase === "loading") {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-24">
+        <div className="relative">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <Sparkles className="absolute -top-1 -right-1 h-4 w-4 text-primary animate-pulse" />
+        </div>
+        <p className="text-lg font-medium text-foreground">Delilah is preparing your quiz…</p>
+        <p className="text-sm text-muted-foreground">Crafting questions tailored to your course</p>
+      </div>
+    );
+  }
 
   if (phase === "quiz" && questions.length > 0 && selectedMode && selectedCourse) {
     return (
