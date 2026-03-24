@@ -26,9 +26,9 @@ export function CourseSelector({ courses, loading, selected, onSelect }: CourseS
       <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-card p-12 text-center">
         <AlertCircle className="mb-4 h-10 w-10 text-muted-foreground" />
         <h2 className="font-display text-lg font-semibold text-foreground">No courses found</h2>
-        <p className="mt-2 text-sm text-muted-foreground">Add your courses in Settings first to start quizzing.</p>
-        <Button variant="secondary" className="mt-4" onClick={() => navigate("/dashboard/settings")}>
-          Go to Settings
+        <p className="mt-2 text-sm text-muted-foreground">Upload a syllabus first to start a quiz.</p>
+        <Button variant="secondary" className="mt-4" onClick={() => navigate("/dashboard/upload-syllabus")}>
+          Upload Syllabus
         </Button>
       </div>
     );
