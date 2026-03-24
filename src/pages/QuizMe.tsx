@@ -24,19 +24,16 @@ export default function QuizMe() {
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [result, setResult] = useState<QuizResult | null>(null);
 
-  // Fetch user courses from profile
+  // Fetch courses from topics table (populated by syllabus upload)
   useEffect(() => {
     if (!user) return;
     supabase
-      .from("profiles")
-      .select("grades")
+      .from("topics")
+      .select("course_name")
       .eq("user_id", user.id)
-      .maybeSingle()
       .then(({ data }) => {
-        const grades = data?.grades as Array<{ course: string; grade: string }> | null;
-        if (grades && grades.length > 0) {
-          setCourses(grades.map((g) => g.course).filter(Boolean));
-        }
+        const unique = [...new Set((data || []).map((t) => t.course_name))];
+        setCourses(unique);
         setLoadingCourses(false);
       });
   }, [user]);
