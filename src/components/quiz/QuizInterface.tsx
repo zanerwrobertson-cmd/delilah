@@ -1,25 +1,39 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Lightbulb, ArrowRight, Timer } from "lucide-react";
+import { Lightbulb, ArrowRight, Timer, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { QuizQuestion, QuizMode, QuizResult } from "@/lib/quiz-types";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface QuizInterfaceProps {
   questions: QuizQuestion[];
   mode: QuizMode;
   course: string;
   onComplete: (result: QuizResult) => void;
+  onExit: (currentIndex: number, userAnswers: (number | null)[]) => void;
+  initialIndex?: number;
+  initialAnswers?: (number | null)[];
 }
 
 const SECONDS_PER_QUESTION = 30;
 
-export function QuizInterface({ questions, mode, course, onComplete }: QuizInterfaceProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
-  const [userAnswers, setUserAnswers] = useState<(number | null)[]>(new Array(questions.length).fill(null));
+export function QuizInterface({ questions, mode, course, onComplete, onExit, initialIndex = 0, initialAnswers }: QuizInterfaceProps) {
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(initialAnswers?.[initialIndex] ?? null);
+  const [userAnswers, setUserAnswers] = useState<(number | null)[]>(initialAnswers || new Array(questions.length).fill(null));
   const [showHint, setShowHint] = useState(false);
-  const [answered, setAnswered] = useState(false);
+  const [answered, setAnswered] = useState(initialAnswers?.[initialIndex] != null);
 
   // Timer state for time-crunch
   const [timeLeft, setTimeLeft] = useState(SECONDS_PER_QUESTION);
@@ -66,7 +80,6 @@ export function QuizInterface({ questions, mode, course, onComplete }: QuizInter
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timerRef.current);
-          // Auto-submit current answer and move on
           handleNext(true);
           return SECONDS_PER_QUESTION;
         }
@@ -90,7 +103,6 @@ export function QuizInterface({ questions, mode, course, onComplete }: QuizInter
     if (timerRef.current) clearInterval(timerRef.current);
 
     if (autoSubmit && !answered) {
-      // Mark as unanswered
       const updated = [...userAnswers];
       updated[currentIndex] = null;
       setUserAnswers(updated);
@@ -102,7 +114,6 @@ export function QuizInterface({ questions, mode, course, onComplete }: QuizInter
       setShowHint(false);
       setAnswered(false);
     } else {
-      // Use timeout to let state update
       setTimeout(() => finishQuiz(), 0);
     }
   }, [currentIndex, questions.length, answered, userAnswers, finishQuiz]);
@@ -117,16 +128,39 @@ export function QuizInterface({ questions, mode, course, onComplete }: QuizInter
         <span className="text-sm text-muted-foreground">
           Question {currentIndex + 1} of {questions.length}
         </span>
-        {mode === "exam-prep" && (
-          <span className={cn(
-            "rounded-full px-3 py-1 text-xs font-medium",
-            q.difficulty === "easy" && "bg-green-500/15 text-green-400",
-            q.difficulty === "medium" && "bg-yellow-500/15 text-yellow-400",
-            q.difficulty === "hard" && "bg-red-500/15 text-red-400",
-          )}>
-            {q.difficulty.charAt(0).toUpperCase() + q.difficulty.slice(1)}
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {mode === "exam-prep" && (
+            <span className={cn(
+              "rounded-full px-3 py-1 text-xs font-medium",
+              q.difficulty === "easy" && "bg-green-500/15 text-green-400",
+              q.difficulty === "medium" && "bg-yellow-500/15 text-yellow-400",
+              q.difficulty === "hard" && "bg-red-500/15 text-red-400",
+            )}>
+              {q.difficulty.charAt(0).toUpperCase() + q.difficulty.slice(1)}
+            </span>
+          )}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive">
+                <LogOut className="h-4 w-4 mr-1.5" /> Exit
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Exit Quiz?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Your progress will be saved. You can resume this quiz later or delete it.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Keep Going</AlertDialogCancel>
+                <AlertDialogAction onClick={() => onExit(currentIndex, userAnswers)}>
+                  Save & Exit
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </div>
 
       <Progress value={progress} className="h-2" />
