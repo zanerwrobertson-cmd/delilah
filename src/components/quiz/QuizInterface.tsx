@@ -16,6 +16,16 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+/**
+ * Quiz step 3: the question screen.
+ *
+ * Shows one question at a time. Picking an answer locks it in and shows right/wrong
+ * colours; then "Next" moves on. After the last question, it scores the quiz and
+ * hands a QuizResult to the parent through onComplete.
+ *
+ * time-crunch mode adds a 30-second countdown that auto-advances when it hits zero.
+ * initialIndex/initialAnswers let a saved quiz resume where it left off.
+ */
 interface QuizInterfaceProps {
   questions: QuizQuestion[];
   mode: QuizMode;
@@ -29,13 +39,16 @@ interface QuizInterfaceProps {
 const SECONDS_PER_QUESTION = 30;
 
 export function QuizInterface({ questions, mode, course, onComplete, onExit, initialIndex = 0, initialAnswers }: QuizInterfaceProps) {
+  // Position in the quiz, the current pick, and every answer so far (null = no answer).
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(initialAnswers?.[initialIndex] ?? null);
   const [userAnswers, setUserAnswers] = useState<(number | null)[]>(initialAnswers || new Array(questions.length).fill(null));
   const [showHint, setShowHint] = useState(false);
+  // True once the current question has an answer; locks the options and shows the Next button.
   const [answered, setAnswered] = useState(initialAnswers?.[initialIndex] != null);
 
-  // Timer state for time-crunch
+  // Timer state for time-crunch. Refs (not state) hold values that change
+  // without needing a re-render: the start time and the interval's id.
   const [timeLeft, setTimeLeft] = useState(SECONDS_PER_QUESTION);
   const startTimeRef = useRef(Date.now());
   const timerRef = useRef<ReturnType<typeof setInterval>>();
@@ -43,6 +56,8 @@ export function QuizInterface({ questions, mode, course, onComplete, onExit, ini
   const q = questions[currentIndex];
   const progress = ((currentIndex + 1) / questions.length) * 100;
 
+  // Score the quiz: count correct answers, collect the wrong ones, and list the
+  // topics of wrong answers as weak areas. Time taken is only reported in time-crunch.
   const finishQuiz = useCallback(() => {
     const finalAnswers = [...userAnswers];
     const elapsed = Math.round((Date.now() - startTimeRef.current) / 1000);
@@ -71,7 +86,12 @@ export function QuizInterface({ questions, mode, course, onComplete, onExit, ini
     });
   }, [userAnswers, questions, mode, course, onComplete]);
 
-  // Timer for time-crunch mode
+  // Timer for time-crunch mode: restarts at 30s on every new question and ticks
+  // once a second. At zero, it auto-advances.
+  // Known issue: the timer keeps running after an answer is picked, and handleNext here
+  // is the copy from when the question loaded. If time runs out after answering, that
+  // stale copy records the answer as null, so it counts as wrong. Fix: stop the timer
+  // in handleSelectAnswer.
   useEffect(() => {
     if (mode !== "time-crunch") return;
     setTimeLeft(SECONDS_PER_QUESTION);
@@ -90,6 +110,7 @@ export function QuizInterface({ questions, mode, course, onComplete, onExit, ini
     return () => clearInterval(timerRef.current);
   }, [currentIndex, mode]);
 
+  // Lock in an answer. One try per question: later clicks are ignored.
   const handleSelectAnswer = (index: number) => {
     if (answered) return;
     setSelectedAnswer(index);
@@ -99,6 +120,8 @@ export function QuizInterface({ questions, mode, course, onComplete, onExit, ini
     setUserAnswers(updated);
   };
 
+  // Go to the next question, or finish after the last one.
+  // autoSubmit = true when the timer ran out (records "no answer").
   const handleNext = useCallback((autoSubmit = false) => {
     if (timerRef.current) clearInterval(timerRef.current);
 
@@ -114,6 +137,7 @@ export function QuizInterface({ questions, mode, course, onComplete, onExit, ini
       setShowHint(false);
       setAnswered(false);
     } else {
+      // Defer one tick so the last setUserAnswers lands before scoring.
       setTimeout(() => finishQuiz(), 0);
     }
   }, [currentIndex, questions.length, answered, userAnswers, finishQuiz]);
@@ -123,7 +147,7 @@ export function QuizInterface({ questions, mode, course, onComplete, onExit, ini
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      {/* Header */}
+      {/* Header: question counter, difficulty badge (exam-prep only), Exit button */}
       <div className="flex items-center justify-between">
         <span className="text-sm text-muted-foreground">
           Question {currentIndex + 1} of {questions.length}
@@ -139,6 +163,7 @@ export function QuizInterface({ questions, mode, course, onComplete, onExit, ini
               {q.difficulty.charAt(0).toUpperCase() + q.difficulty.slice(1)}
             </span>
           )}
+          {/* Exit asks for confirmation, then saves progress via onExit */}
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive">
@@ -165,7 +190,7 @@ export function QuizInterface({ questions, mode, course, onComplete, onExit, ini
 
       <Progress value={progress} className="h-2" />
 
-      {/* Timer */}
+      {/* Timer (time-crunch only); turns red in the last 10 seconds */}
       {mode === "time-crunch" && (
         <div className={cn(
           "flex items-center justify-center gap-2 rounded-lg border p-3 font-display text-xl font-bold transition-colors",
@@ -182,6 +207,8 @@ export function QuizInterface({ questions, mode, course, onComplete, onExit, ini
 
         <div className="mt-6 grid gap-3">
           {q.options.map((opt, i) => {
+            // Colour each option. After answering: correct = green, your wrong pick = red,
+            // the rest fade out.
             let optionStyle = "border-border bg-background hover:border-primary/50";
             if (answered) {
               if (i === q.correctIndex) {
@@ -206,6 +233,7 @@ export function QuizInterface({ questions, mode, course, onComplete, onExit, ini
                   !answered && "cursor-pointer"
                 )}
               >
+                {/* 65 is the character code for "A", so options are labelled A, B, C, D */}
                 <span className="mr-3 text-muted-foreground">{String.fromCharCode(65 + i)}.</span>
                 <span className="text-foreground">{opt}</span>
               </button>
@@ -230,7 +258,7 @@ export function QuizInterface({ questions, mode, course, onComplete, onExit, ini
         )}
       </div>
 
-      {/* Next / Finish */}
+      {/* Next / Finish: only appears after the question is answered */}
       {answered && (
         <Button className="w-full" onClick={() => handleNext()}>
           {isLastQuestion ? "See Results" : "Next Question"} <ArrowRight className="ml-2 h-4 w-4" />

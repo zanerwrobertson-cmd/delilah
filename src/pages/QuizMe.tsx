@@ -11,8 +11,23 @@ import { SavedQuizzes } from "@/components/quiz/SavedQuizzes";
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
+/**
+ * Quiz Me (/dashboard/quiz).
+ *
+ * This page is a small state machine. `phase` decides which screen shows:
+ *   select-course -> select-mode -> loading -> quiz -> results
+ *
+ * - Courses come from the user's topics (added by uploading a syllabus).
+ * - Questions come from Claude via the generate-quiz edge function.
+ * - "Save & Exit" stores an unfinished quiz in quiz_progress so it can be resumed later.
+ * - A finished quiz is recorded in quiz_results.
+ *
+ * The screens themselves live in src/components/quiz/*. This file holds the
+ * state and the database/AI calls.
+ */
 type Phase = "select-course" | "select-mode" | "loading" | "quiz" | "results";
 
+// A row from the quiz_progress table (an unfinished quiz).
 interface SavedQuiz {
   id: string;
   course: string;
@@ -35,12 +50,14 @@ export default function QuizMe() {
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [result, setResult] = useState<QuizResult | null>(null);
 
+  // Resume support: where to restart a saved quiz, and which quiz_progress row it came
+  // from (so it gets updated, not duplicated, and deleted once finished).
   const [savedQuizzes, setSavedQuizzes] = useState<SavedQuiz[]>([]);
   const [resumeIndex, setResumeIndex] = useState(0);
   const [resumeAnswers, setResumeAnswers] = useState<(number | null)[] | undefined>();
   const [activeProgressId, setActiveProgressId] = useState<string | null>(null);
 
-  // Fetch courses and saved quizzes
+  // On load: fetch the course list (distinct course names in topics) and any saved quizzes.
   useEffect(() => {
     if (!user) return;
 
@@ -57,6 +74,7 @@ export default function QuizMe() {
     fetchSavedQuizzes();
   }, [user]);
 
+  // Unfinished quizzes, most recently touched first.
   const fetchSavedQuizzes = async () => {
     if (!user) return;
     const { data } = await supabase
@@ -67,6 +85,8 @@ export default function QuizMe() {
     setSavedQuizzes((data as SavedQuiz[]) || []);
   };
 
+  // "Start Quiz": gather the course's topics, weak areas and the user's learning style,
+  // then ask Claude for 10 questions tailored to them.
   const startQuiz = useCallback(async () => {
     if (!selectedCourse || !selectedMode || !user) return;
     setPhase("loading");
@@ -101,6 +121,8 @@ export default function QuizMe() {
       if (error) throw error;
       if (!data?.questions || !Array.isArray(data.questions)) throw new Error("Invalid response from AI");
 
+      // Normalise Claude's output: give each question an id, and fill defaults for
+      // any field it left out so the quiz screen never crashes on missing data.
       let qs: QuizQuestion[] = data.questions.map((q: any, i: number) => ({
         id: i + 1,
         question: q.question,
@@ -111,6 +133,7 @@ export default function QuizMe() {
         difficulty: q.difficulty || "medium",
       }));
 
+      // The prompt already asks for easy -> hard; sorting guarantees it.
       if (selectedMode === "exam-prep") qs = sortByDifficulty(qs);
 
       setQuestions(qs);
@@ -122,10 +145,12 @@ export default function QuizMe() {
     }
   }, [selectedCourse, selectedMode, user]);
 
+  // "Save & Exit" mid-quiz: store the questions, answers so far, and position.
   const handleQuizExit = async (currentIndex: number, userAnswers: (number | null)[]) => {
     if (!user || !selectedCourse || !selectedMode) return;
 
     try {
+      // A resumed quiz already has a row, so update it. A new quiz gets a new row.
       if (activeProgressId) {
         await supabase.from("quiz_progress").update({
           current_index: currentIndex,
@@ -154,6 +179,7 @@ export default function QuizMe() {
     }
   };
 
+  // Load a saved quiz back in and jump straight to the question screen.
   const handleResume = (quiz: SavedQuiz) => {
     setQuestions(quiz.questions as QuizQuestion[]);
     setSelectedCourse(quiz.course);
@@ -170,6 +196,7 @@ export default function QuizMe() {
     await fetchSavedQuizzes();
   };
 
+  // Quiz finished: show results right away, then record the score in quiz_results.
   const handleQuizComplete = async (quizResult: QuizResult) => {
     setResult(quizResult);
     setPhase("results");
@@ -194,6 +221,7 @@ export default function QuizMe() {
     }
   };
 
+  // "Retry": same course, pick a mode again (generates fresh questions).
   const handleRetry = () => {
     setPhase("select-mode");
     setSelectedMode(null);
@@ -210,6 +238,7 @@ export default function QuizMe() {
     setResult(null);
   };
 
+  // ── Render the screen for the current phase ──
   if (phase === "loading") {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-24">
@@ -248,6 +277,7 @@ export default function QuizMe() {
     );
   }
 
+  // Phases select-course and select-mode share this page frame.
   return (
     <div className="space-y-8 max-w-2xl mx-auto">
       <h1 className="font-display text-3xl font-bold text-foreground">Quiz Me</h1>

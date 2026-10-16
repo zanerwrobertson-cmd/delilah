@@ -11,13 +11,17 @@ interface QuizResultsProps {
   onBack: () => void;
 }
 
+/**
+ * Quiz step 4: results screen. Shows the score, the weak-area topics,
+ * and each missed question with the user's answer next to the correct one.
+ */
 export function QuizResults({ result, questions, onRetry, onBack }: QuizResultsProps) {
   const navigate = useNavigate();
   const percentage = Math.round((result.score / result.total) * 100);
 
   return (
     <div className="max-w-2xl mx-auto space-y-8 animate-fade-in">
-      {/* Score */}
+      {/* Score: trophy is green at 80%+, yellow at 50%+, red below */}
       <div className="rounded-xl border border-border bg-card p-8 text-center">
         <Trophy className={cn(
           "mx-auto mb-4 h-12 w-12",
@@ -64,6 +68,7 @@ export function QuizResults({ result, questions, onRetry, onBack }: QuizResultsP
             Questions you missed
           </h2>
           {result.wrongQuestions.map((wq, i) => {
+            // userAnswers is indexed by question position, so find this question's position.
             const originalIndex = questions.findIndex((q) => q.id === wq.id);
             const userAnswer = result.userAnswers[originalIndex];
             return (
