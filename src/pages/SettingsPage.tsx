@@ -1,6 +1,10 @@
 import { useAuth } from "@/hooks/useAuth";
 import { Settings } from "lucide-react";
 
+/**
+ * Settings (/dashboard/settings). Read-only for now: shows the account's email
+ * and the display name saved in the auth user's metadata at sign-up.
+ */
 export default function SettingsPage() {
   const { user } = useAuth();
 

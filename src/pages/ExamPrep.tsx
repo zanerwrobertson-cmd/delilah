@@ -1,5 +1,10 @@
 import { GraduationCap } from "lucide-react";
 
+/**
+ * Exam Prep (/dashboard/exam-prep).
+ * TODO: placeholder only, there's no exam-prep logic yet. For now, Quiz Me's
+ * "exam-prep" mode (easy-to-hard questions) is the closest working feature.
+ */
 export default function ExamPrep() {
   return (
     <div className="space-y-6">

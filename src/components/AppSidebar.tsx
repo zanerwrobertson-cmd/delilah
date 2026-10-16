@@ -16,6 +16,10 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 
+/**
+ * Left-hand navigation for the logged-in app.
+ * To add a page to the menu: add an entry here and a matching <Route> in App.tsx.
+ */
 const navItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Study Plan", url: "/dashboard/study-plan", icon: CalendarDays },
@@ -26,6 +30,7 @@ const navItems = [
 ];
 
 export function AppSidebar() {
+  // When collapsed, the sidebar shows icons only, so labels are hidden below.
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
@@ -49,6 +54,7 @@ export function AppSidebar() {
               {navItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
+                    {/* `end` on /dashboard stops it highlighting on every /dashboard/* page */}
                     <NavLink to={item.url} end={item.url === "/dashboard"} className="hover:bg-sidebar-accent" activeClassName="bg-sidebar-accent text-primary font-medium">
                       <item.icon className="mr-2 h-4 w-4" />
                       {!collapsed && <span>{item.title}</span>}
@@ -60,6 +66,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      {/* Sign out: clears the session; ProtectedRoute then redirects to /login */}
       <SidebarFooter className="p-2">
         <Button variant="ghost" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground" onClick={signOut}>
           <LogOut className="h-4 w-4" />

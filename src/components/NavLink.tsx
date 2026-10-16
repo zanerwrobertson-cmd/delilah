@@ -2,6 +2,12 @@ import { NavLink as RouterNavLink, NavLinkProps } from "react-router-dom";
 import { forwardRef } from "react";
 import { cn } from "@/lib/utils";
 
+/**
+ * A React Router <NavLink> that takes plain class strings instead of a function.
+ * React Router's version needs className={({ isActive }) => ...}; this wrapper lets
+ * you write className="..." activeClassName="..." instead, which is simpler.
+ * forwardRef lets shadcn's SidebarMenuButton (asChild) attach to the underlying <a>.
+ */
 interface NavLinkCompatProps extends Omit<NavLinkProps, "className"> {
   className?: string;
   activeClassName?: string;
