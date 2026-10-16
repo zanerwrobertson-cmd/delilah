@@ -1,9 +1,11 @@
 import { useLocation } from "react-router-dom";
 import { useEffect } from "react";
 
+/** 404 page, shown for any URL that doesn't match a route in App.tsx. */
 const NotFound = () => {
   const location = useLocation();
 
+  // Log bad URLs to the browser console to help spot broken links.
   useEffect(() => {
     console.error("404 Error: User attempted to access non-existent route:", location.pathname);
   }, [location.pathname]);

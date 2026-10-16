@@ -1,6 +1,12 @@
 import { useAuth } from "@/hooks/useAuth";
 import { CalendarDays, HelpCircle, GraduationCap, TrendingUp } from "lucide-react";
 
+/**
+ * Dashboard home (/dashboard): greeting plus a row of stat cards.
+ */
+
+// TODO: these values are placeholders and always show zero. To make them real,
+// query quiz_results / study_sessions for the logged-in user and count them.
 const stats = [
   { label: "Study Hours", value: "0h", icon: CalendarDays },
   { label: "Quizzes Taken", value: "0", icon: HelpCircle },
@@ -13,6 +19,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
+      {/* Greets the user by the display name they gave at sign-up, if any */}
       <div>
         <h1 className="font-display text-3xl font-bold text-foreground">
           Welcome back{user?.user_metadata?.display_name ? `, ${user.user_metadata.display_name}` : ""} 👋

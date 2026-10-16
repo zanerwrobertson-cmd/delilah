@@ -3,6 +3,12 @@ import { Button } from "@/components/ui/button";
 import { ShaderAnimation } from "@/components/ui/shader-animation";
 import { BookOpen, Brain, Zap, Target } from "lucide-react";
 
+/**
+ * Public landing page (/): nav bar, hero section with an animated shader
+ * background, and three feature cards. Both buttons lead to sign up / log in.
+ */
+
+// The three feature cards below the hero. Add an entry here to add a card.
 const features = [
   { icon: Brain, title: "AI-Powered Plans", desc: "Personalized study schedules that adapt to your pace." },
   { icon: Zap, title: "Smart Quizzes", desc: "Test yourself with AI-generated questions on any topic." },
@@ -30,6 +36,7 @@ export default function Landing() {
 
       {/* Hero */}
       <section className="relative flex flex-col items-center px-6 pt-24 pb-20 text-center md:pt-36">
+        {/* Animated WebGL background (three.js), faded and click-through */}
         <div className="absolute inset-0 overflow-hidden opacity-30 pointer-events-none">
           <ShaderAnimation />
         </div>
@@ -53,6 +60,7 @@ export default function Landing() {
 
       {/* Features */}
       <section className="mx-auto grid max-w-4xl gap-6 px-6 pb-32 md:grid-cols-3">
+        {/* Each card fades in 0.1s after the previous one */}
         {features.map((f, i) => (
           <div
             key={f.title}
