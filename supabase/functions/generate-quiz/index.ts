@@ -1,5 +1,23 @@
+/**
+ * generate-quiz — Supabase Edge Function
+ *
+ * Builds a quiz-writing prompt from the student's course info and asks Claude
+ * for 10 multiple-choice questions, returned as structured JSON.
+ *
+ * Used by: src/pages/QuizMe.tsx
+ *
+ * Request:  POST { courseName, topics?, weakAreas?, learningStyle?, mode? }
+ *           mode is "exam-prep" | "time-crunch" | anything else (normal)
+ * Response: 200 { questions: QuizQuestion[] } | 5xx { error }
+ *           Each question: { question, options[4], correctIndex, hint, difficulty, topic }
+ *
+ * The secret CLAUDE_API_KEY lives only on the server (see claude-proxy for why).
+ */
+
+// Loads variables from a local .env file when running with `supabase functions serve`.
 import "https://deno.land/std@0.168.0/dotenv/load.ts";
 
+// CORS headers let the browser call this function from another origin.
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -7,6 +25,7 @@ const corsHeaders = {
 };
 
 Deno.serve(async (req) => {
+  // Approve the browser's CORS preflight request.
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -22,16 +41,19 @@ Deno.serve(async (req) => {
 
     const { courseName, topics, weakAreas, learningStyle, mode } = await req.json();
 
+    // Turn the inputs into readable text for the prompt, with fallbacks when they're empty.
     const topicList = (topics || []).map((t: string) => t).join(", ") || "general course material";
     const weakList = (weakAreas || []).join(", ") || "none identified";
     const style = learningStyle || "standard";
+    // Each quiz mode adds one extra instruction for Claude.
     const modeInstructions = mode === "exam-prep"
       ? "Order questions from easy to hard difficulty, progressively increasing."
       : mode === "time-crunch"
       ? "Keep questions concise and answerable within 30 seconds."
       : "";
 
-    const prompt = `Generate exactly 10 quiz questions for a student studying "${courseName}".
+    // The prompt spells out the exact JSON shape so the reply can be parsed by code.
+    const prompt =`Generate exactly 10 quiz questions for a student studying "${courseName}".
 
 Course topics covered: ${topicList}
 
@@ -53,6 +75,7 @@ Make sure questions are specific to the actual course content, not generic study
 Vary the difficulty: include 3 easy, 4 medium, and 3 hard questions.
 Do NOT wrap in markdown code blocks. Return raw JSON only.`;
 
+    // Send the prompt to Claude using the server-side API key.
     const claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -79,7 +102,9 @@ Do NOT wrap in markdown code blocks. Return raw JSON only.`;
     const data = await claudeResponse.json();
     const text = data.content?.[0]?.text || "";
 
-    // Parse the JSON array from Claude's response
+    // Parse the JSON array from Claude's response.
+    // The regex grabs everything from the first "[" to the last "]", in case Claude
+    // adds a sentence or code fences around the JSON despite being told not to.
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
       return new Response(
