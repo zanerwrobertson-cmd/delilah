@@ -10,6 +10,22 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
+/**
+ * Study Plan (/dashboard/study-plan).
+ *
+ * The page has three phases (the `phase` state in StudyPlan below):
+ *   "setup"   - list each course found in the user's topics; pick days/week per course
+ *   "loading" - ask Claude (generate-study-plan edge function) for a plan per course
+ *   "plan"    - show the plans, one tab per course, each a list of week cards
+ *
+ * If the AI call fails, a simple plan is built from the topics instead, so the
+ * user always gets something. Generated weeks are also logged to study_sessions.
+ *
+ * File layout: types -> AI/data helpers -> UI pieces -> main component.
+ */
+
+// ── Types ──
+// Shapes used to render the plan on screen.
 interface DailyTask {
   day: string;
   task: string;
@@ -25,6 +41,7 @@ interface WeekCard {
   weakAreasAddressed?: string[];
 }
 
+// The user's choice for one course on the setup screen.
 interface CourseSetup {
   courseName: string;
   daysPerWeek: number;
@@ -35,6 +52,7 @@ interface CoursePlan {
   weeks: WeekCard[];
 }
 
+// Rows as they come back from the topics and assignments tables.
 interface TopicRow {
   topic_name: string;
   week_number: number | null;
@@ -49,8 +67,17 @@ interface AssignmentRow {
   deadline: string | null;
 }
 
+// Study days are always taken from the start of the week: 3 days/week = Mon, Tue, Wed.
 const ALL_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+// ── AI + data helpers ──
+
+/**
+ * Get a week-by-week plan for one course.
+ * Sends the course's topics, deadlines and weak areas to Claude, then reshapes
+ * Claude's JSON into WeekCards. On any failure, falls back to a basic
+ * template plan built from the topics (see the catch block).
+ */
 async function generatePlanWithAI(
   courseName: string,
   topics: TopicRow[],
@@ -81,6 +108,8 @@ async function generatePlanWithAI(
     const weeks = data?.weeks;
     if (!weeks || !Array.isArray(weeks)) throw new Error("Invalid response format");
 
+    // Convert Claude's format into ours. Each daily task is paired with a weekday, and
+    // filled with a generic task if Claude returned fewer tasks than study days.
     return weeks.map((w: any, i: number) => ({
       week: w.week_number || i + 1,
       topic: w.focus_topic || `Week ${i + 1}`,
@@ -97,7 +126,8 @@ async function generatePlanWithAI(
     console.error("AI plan generation failed, using fallback:", err);
     toast.error("AI generation failed — using a basic plan instead.");
 
-    // Fallback from real topic data
+    // Fallback from real topic data: group topics by week (topics with no week get
+    // the next number), then rotate through generic study activities for each day.
     const topicsByWeek = new Map<number, TopicRow[]>();
     let weekCounter = 1;
     topics.forEach((t) => {
@@ -135,6 +165,9 @@ async function generatePlanWithAI(
   }
 }
 
+// Record each generated week as a row in study_sessions (one row per course per week).
+// This builds a history of what was planned; nothing reads it back yet.
+// A failed save is only logged, since the plan is already on screen.
 async function saveToStudySessions(
   userId: string,
   coursePlans: CoursePlan[]
@@ -158,9 +191,12 @@ async function saveToStudySessions(
 
 // ── UI Components ──
 
+// Phase "setup": one card per course with a 1-7 days/week slider, plus the Build button.
 function SetupScreen({ courses, onBuild, onDelete }: { courses: CourseSetup[]; onBuild: (c: CourseSetup[]) => void; onDelete: (courseName: string) => void }) {
+  // Local copy so slider changes don't touch the parent until Build is clicked.
   const [configs, setConfigs] = useState<CourseSetup[]>(courses);
 
+  // Re-sync if the parent's course list changes (e.g. after loading from the database).
   useEffect(() => {
     setConfigs(courses);
   }, [courses]);
@@ -169,6 +205,7 @@ function SetupScreen({ courses, onBuild, onDelete }: { courses: CourseSetup[]; o
     setConfigs(prev => prev.map((c, i) => i === index ? { ...c, daysPerWeek: days } : c));
   };
 
+  // Hides the course from this plan only; its topics stay in the database.
   const handleDelete = (courseName: string) => {
     setConfigs(prev => prev.filter(c => c.courseName !== courseName));
     onDelete(courseName);
@@ -234,6 +271,8 @@ function SetupScreen({ courses, onBuild, onDelete }: { courses: CourseSetup[]; o
   );
 }
 
+// One course's plan: a card per week showing its daily tasks and tips.
+// Weak-area weeks and tasks are highlighted in red.
 function CoursePlanView({ plan }: { plan: CoursePlan }) {
   return (
     <div className="space-y-6">
@@ -294,6 +333,8 @@ function CoursePlanView({ plan }: { plan: CoursePlan }) {
   );
 }
 
+// Phase "plan": every course's plan (tabs when there's more than one course),
+// plus the "Need extra help?" box for asking Delilah to adjust the plan.
 function PlanView({ coursePlans, struggle, setStruggle, onSubmitStruggle }: {
   coursePlans: CoursePlan[]; struggle: string; setStruggle: (s: string) => void; onSubmitStruggle: () => void;
 }) {
@@ -356,9 +397,12 @@ export default function StudyPlan() {
   const [allAssignments, setAllAssignments] = useState<AssignmentRow[]>([]);
   const [learningStyle, setLearningStyle] = useState<string | null>(null);
   const [coursePlans, setCoursePlans] = useState<CoursePlan[]>([]);
+  // Text typed in the "Need extra help?" box.
   const [struggle, setStruggle] = useState("");
   const [loadingCourses, setLoadingCourses] = useState(true);
 
+  // On load: fetch the user's topics, assignments and learning style in parallel.
+  // The course list is every distinct course_name in topics (from syllabus uploads).
   useEffect(() => {
     if (!user) return;
 
@@ -374,6 +418,7 @@ export default function StudyPlan() {
       setAllAssignments((assignmentsRes.data || []) as AssignmentRow[]);
       setLearningStyle(profileRes.data?.learning_style || null);
 
+      // Each course starts at 5 days/week; the user adjusts it on the setup screen.
       const unique = [...new Set(topics.map(t => t.course_name))];
       setCourses(unique.map(name => ({ courseName: name, daysPerWeek: 5 })));
       setLoadingCourses(false);
@@ -382,6 +427,7 @@ export default function StudyPlan() {
     fetchAll();
   }, [user]);
 
+  // "Build My Study Plan": generate every course's plan at the same time (Promise.all).
   const handleBuild = async (configs: CourseSetup[]) => {
     if (!user) return;
     setPhase("loading");
@@ -412,12 +458,15 @@ export default function StudyPlan() {
     }
   };
 
+  // "Need extra help?" submit: save what the user typed as a new weak-area topic,
+  // then regenerate every plan so the new weak area is included.
   const handleSubmitStruggle = async () => {
     if (!struggle.trim() || !user) return;
     setPhase("loading");
 
     try {
-      // Determine which course tab is active; default to first
+      // Determine which course tab is active; default to first.
+      // TODO: tabs aren't tracked yet, so this always picks the first course.
       const targetCourse = coursePlans[0]?.courseName;
       if (!targetCourse) { setPhase("plan"); return; }
 
@@ -463,6 +512,7 @@ export default function StudyPlan() {
     }
   };
 
+  // ── Render: pick what to show based on loading state and phase ──
   if (loadingCourses) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -486,6 +536,7 @@ export default function StudyPlan() {
     );
   }
 
+  // Removes a course from this session's plan list (not from the database).
   const handleDeleteCourse = (courseName: string) => {
     setCourses(prev => prev.filter(c => c.courseName !== courseName));
     toast.success(`Removed "${courseName}" from your study plan.`);
