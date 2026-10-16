@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { sortByDifficulty } from "@/lib/quiz-generator";
+import { sortByDifficulty } from "@/lib/quiz-utils";
 import type { QuizQuestion, QuizMode, QuizResult } from "@/lib/quiz-types";
 import { CourseSelector } from "@/components/quiz/CourseSelector";
 import { ModeSelector } from "@/components/quiz/ModeSelector";
