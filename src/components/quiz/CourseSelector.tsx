@@ -10,6 +10,10 @@ interface CourseSelectorProps {
   onSelect: (course: string) => void;
 }
 
+/**
+ * Quiz step 1: pick a course from a dropdown.
+ * Shows a spinner while loading, or a link to Upload Syllabus if the user has no courses yet.
+ */
 export function CourseSelector({ courses, loading, selected, onSelect }: CourseSelectorProps) {
   const navigate = useNavigate();
 

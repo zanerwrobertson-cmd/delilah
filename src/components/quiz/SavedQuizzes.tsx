@@ -3,6 +3,12 @@ import { PlayCircle, Trash2, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 
+/**
+ * List of unfinished quizzes (rows from quiz_progress) with Resume and Delete buttons.
+ * Shown above the course picker on the Quiz Me page.
+ */
+
+// Same shape as the SavedQuiz type in QuizMe.tsx.
 interface SavedQuiz {
   id: string;
   course: string;
@@ -34,6 +40,7 @@ export function SavedQuizzes({ quizzes, onResume, onDelete }: SavedQuizzesProps)
             <div className="space-y-1">
               <p className="font-medium text-foreground">{quiz.course}</p>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                {/* Details line: mode, progress, and "updated 5 minutes ago" via date-fns */}
                 <span className="capitalize">{quiz.mode.replace("-", " ")}</span>
                 <span>•</span>
                 <span>{quiz.current_index + 1}/{quiz.questions.length} answered</span>

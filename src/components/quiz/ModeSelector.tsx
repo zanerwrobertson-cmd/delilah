@@ -3,6 +3,12 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { QuizMode } from "@/lib/quiz-types";
 
+/**
+ * Quiz step 2: choose a quiz mode, then Start.
+ * The mode changes both the AI prompt (generate-quiz) and how QuizInterface behaves.
+ */
+
+// The three mode cards. `id` must match the QuizMode type in quiz-types.ts.
 const modes = [
   {
     id: "standard" as QuizMode,
