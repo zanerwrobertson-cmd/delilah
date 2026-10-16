@@ -155,6 +155,12 @@ npm run dev
 
 The app runs at http://localhost:8080.
 
+## Deploying (Vercel)
+
+Import the repo in Vercel. It detects Vite (build `npm run build`, output `dist/`). Add the three `VITE_SUPABASE_*` variables from `.env` under **Settings → Environment Variables**, then add your Vercel URL to Supabase under **Authentication → URL Configuration** so email and password-reset links point to it.
+
+`vercel.json` sends every URL to `index.html`. This is a single-page app: React Router handles routes like `/dashboard/quiz` in the browser, and no such file exists on the server. Without the rewrite, refreshing any page other than `/` returns a 404.
+
 ## Scripts
 
 | Command | Description |
