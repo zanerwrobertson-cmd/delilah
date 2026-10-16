@@ -7,9 +7,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { BookOpen } from "lucide-react";
 import { toast } from "sonner";
 
+/**
+ * Reset-password page (/reset-password).
+ * Step 2 of the reset flow. The user arrives here from the email link sent by
+ * ForgotPassword.tsx. The link logs them in with a temporary "recovery" session,
+ * which allows them to set a new password.
+ */
 export default function ResetPassword() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  // True once we've confirmed the user came from a valid reset link.
   const [ready, setReady] = useState(false);
   const navigate = useNavigate();
 
@@ -32,6 +39,7 @@ export default function ResetPassword() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    // Works because the reset link already signed the user in (recovery session).
     const { error } = await supabase.auth.updateUser({ password });
     setLoading(false);
     if (error) {
@@ -42,6 +50,7 @@ export default function ResetPassword() {
     }
   };
 
+  // Until the recovery link is confirmed, show a spinner instead of the form.
   if (!ready) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
