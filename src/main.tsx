@@ -1,7 +1,6 @@
 import { createRoot } from "react-dom/client";
 
 console.log('Connected Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
-console.log("Key:", import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
 import App from "./App.tsx";
 import "./index.css";
 
