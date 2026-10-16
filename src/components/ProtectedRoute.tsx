@@ -3,7 +3,7 @@ import { Navigate } from "react-router-dom";
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-export function ProtectedRoute({ children }: { children: React.ReactNode }) {
+export function ProtectedRoute({ children, requireOnboarding = true }: { children: React.ReactNode; requireOnboarding?: boolean }) {
   const { user, loading } = useAuth();
   const [checkingOnboarding, setCheckingOnboarding] = useState(true);
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
@@ -41,6 +41,6 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) return <Navigate to="/login" replace />;
-  if (onboardingCompleted === false) return <Navigate to="/onboarding" replace />;
+  if (requireOnboarding && onboardingCompleted === false) return <Navigate to="/onboarding" replace />;
   return <>{children}</>;
 }
