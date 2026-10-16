@@ -7,14 +7,22 @@ import { supabase } from "@/integrations/supabase/client";
 import { BookOpen } from "lucide-react";
 import { toast } from "sonner";
 
+/**
+ * Forgot-password page (/forgot-password).
+ * Step 1 of the reset flow: Supabase emails the user a link that opens
+ * /reset-password (step 2, see ResetPassword.tsx).
+ */
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  // Once the email is sent, hide the form and show a "check your email" message.
   const [sent, setSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    // redirectTo must also be listed under Authentication > URL Configuration
+    // in the Supabase dashboard, or Supabase will ignore it.
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`,
     });
