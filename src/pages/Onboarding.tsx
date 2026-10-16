@@ -8,6 +8,17 @@ import { BookOpen, Eye, Ear, BookMarked, MousePointerClick, Plus, Trash2, ArrowR
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
+/**
+ * Onboarding (/onboarding): a 3-step wizard shown once after sign-up.
+ *   Step 1: pick a learning style
+ *   Step 2: subjects the student struggles with
+ *   Step 3: current grades (optional, can be skipped)
+ * Answers are saved to the user's profiles row, along with onboarding_completed = true,
+ * which stops ProtectedRoute from sending them here again. The AI features read
+ * these answers later to personalise quizzes and study plans.
+ */
+
+// The four learning-style cards in step 1. `id` is what gets saved to the database.
 const learningStyles = [
   { id: "visual", label: "Visual", desc: "Diagrams, charts, videos", icon: Eye },
   { id: "auditory", label: "Auditory", desc: "Lectures, discussions, podcasts", icon: Ear },
@@ -15,6 +26,7 @@ const learningStyles = [
   { id: "interactive", label: "Interactive", desc: "Practice, experiments, projects", icon: MousePointerClick },
 ];
 
+// One row of the grades table in step 3.
 interface GradeRow {
   course: string;
   grade: string;
@@ -23,6 +35,7 @@ interface GradeRow {
 export default function Onboarding() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  // Which wizard step is showing (1-3).
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
 
@@ -33,6 +46,7 @@ export default function Onboarding() {
   // Step 3
   const [grades, setGrades] = useState<GradeRow[]>([{ course: "", grade: "" }]);
 
+  // Helpers for adding, removing and editing rows in the grades table.
   const addGradeRow = () => setGrades([...grades, { course: "", grade: "" }]);
   const removeGradeRow = (i: number) => setGrades(grades.filter((_, idx) => idx !== i));
   const updateGrade = (i: number, field: keyof GradeRow, value: string) => {
@@ -41,16 +55,21 @@ export default function Onboarding() {
     setGrades(updated);
   };
 
+  // Save all answers to the profile. Called by "Finish" (skipGrades=false)
+  // or "Skip this step" (skipGrades=true, which saves an empty grades list).
   const handleComplete = async (skipGrades = false) => {
     if (!user) return;
     setSaving(true);
 
+    // Drop half-filled rows; only keep rows with both a course and a grade.
     const validGrades = skipGrades
       ? []
       : grades
           .filter((g) => g.course.trim() && g.grade.trim())
           .map((g) => ({ course: g.course, grade: g.grade } as Record<string, string>));
 
+    // Update (not insert): the profile row already exists, created by the
+    // handle_new_user trigger at sign-up. RLS only allows updating your own row.
     const { error } = await supabase
       .from("profiles")
       .update({
@@ -72,7 +91,7 @@ export default function Onboarding() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-lg space-y-8">
-        {/* Progress */}
+        {/* Progress bar: one pill per step, filled up to the current step */}
         <div className="flex items-center justify-center gap-2">
           {[1, 2, 3].map((s) => (
             <div
@@ -90,7 +109,7 @@ export default function Onboarding() {
           <p className="text-sm text-muted-foreground">Step {step} of 3</p>
         </div>
 
-        {/* Step 1 */}
+        {/* Step 1: learning style. Continue stays disabled until one is picked. */}
         {step === 1 && (
           <div className="space-y-6 animate-fade-in">
             <h1 className="text-center font-display text-2xl font-bold text-foreground">
@@ -124,7 +143,7 @@ export default function Onboarding() {
           </div>
         )}
 
-        {/* Step 2 */}
+        {/* Step 2: struggle subjects, free text (may be left blank) */}
         {step === 2 && (
           <div className="space-y-6 animate-fade-in">
             <h1 className="text-center font-display text-2xl font-bold text-foreground">
@@ -147,7 +166,7 @@ export default function Onboarding() {
           </div>
         )}
 
-        {/* Step 3 */}
+        {/* Step 3: grades table (optional). The delete button hides when only one row is left. */}
         {step === 3 && (
           <div className="space-y-6 animate-fade-in">
             <h1 className="text-center font-display text-2xl font-bold text-foreground">
