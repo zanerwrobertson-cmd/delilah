@@ -18,6 +18,22 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Upload, FileText, Loader2, CheckCircle2, BookOpen, AlertTriangle } from "lucide-react";
 
+/**
+ * Upload Syllabus (/dashboard/upload-syllabus).
+ *
+ * The flow, all in handleExtract():
+ *   1. Read the PDF's text in the browser with pdf.js (the file itself isn't uploaded)
+ *   2. Send that text to Claude (via the claude-proxy edge function) and ask for JSON:
+ *      a list of assignments/deadlines and a list of weekly topics
+ *   3. Parse Claude's JSON
+ *   4. Save each assignment and topic to the database under the current user
+ *   5. Show the results in two tables
+ *
+ * The user can then flag topics as "weak areas". Study Plan and Quiz Me
+ * give flagged topics extra attention.
+ */
+
+// Badge colour for each assignment type in the results table.
 const typeBadgeColors: Record<string, string> = {
   exam: "bg-destructive text-destructive-foreground",
   quiz: "bg-orange-500/15 text-orange-600 border-orange-500/30",
@@ -26,6 +42,7 @@ const typeBadgeColors: Record<string, string> = {
   paper: "bg-violet-500/15 text-violet-600 border-violet-500/30",
 };
 
+// Shapes of the items Claude returns (they match the assignments/topics table columns).
 interface Assignment {
   assignment_name: string;
   deadline: string | null;
@@ -40,6 +57,7 @@ interface Topic {
 export default function UploadSyllabus() {
   const { user } = useAuth();
   const { toast } = useToast();
+  // Points at the hidden <input type="file">, so clicking the drop zone can open the file picker.
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -51,8 +69,10 @@ export default function UploadSyllabus() {
     assignments: Assignment[];
     topics: Topic[];
   } | null>(null);
+  // Topics the user flagged as weak, keyed by "week-topicName".
   const [flaggedTopics, setFlaggedTopics] = useState<Set<string>>(new Set());
 
+  // Accept only PDFs up to 10 MB; picking a new file clears old results.
   const validateAndSetFile = (selected: File) => {
     if (selected.type !== "application/pdf") {
       toast({ title: "Invalid file", description: "Please upload a PDF file.", variant: "destructive" });
@@ -67,11 +87,13 @@ export default function UploadSyllabus() {
     setFlaggedTopics(new Set());
   };
 
+  // A file can arrive two ways: the file picker, or drag-and-drop onto the drop zone.
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
     if (selected) validateAndSetFile(selected);
   };
 
+  // preventDefault stops the browser from opening the dropped PDF in a new tab.
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -84,11 +106,15 @@ export default function UploadSyllabus() {
     if (selected) validateAndSetFile(selected);
   };
 
+  // Pull plain text out of every page of the PDF, pages separated by blank lines.
+  // Scanned PDFs (images only, no text layer) come back empty.
   const extractTextFromPdf = async (pdfFile: File): Promise<string> => {
+    // pdf.js parses in a background worker; its version must match the pdfjs-dist package (4.4.168).
     pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs`;
     const arrayBuffer = await pdfFile.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const pages: string[] = [];
+    // pdf.js page numbers start at 1. Each page is a list of text fragments; join them with spaces.
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
@@ -97,6 +123,7 @@ export default function UploadSyllabus() {
     return pages.join("\n\n");
   };
 
+  // Main action behind the "Extract Deadlines" button. Steps 1-5 are numbered below.
   const handleExtract = async () => {
     if (!file || !courseName.trim() || !user) return;
 
@@ -113,7 +140,8 @@ export default function UploadSyllabus() {
         return;
       }
 
-      // 2. Call Claude via edge function proxy
+      // 2. Call Claude via the claude-proxy edge function.
+      // The prompt describes the exact JSON shape we want back so it can be parsed by code.
       const prompt = `You are a syllabus parser. Extract all assignments, exams, quizzes, projects, and papers with their deadlines, plus weekly topics from this syllabus text for the course "${courseName.trim()}".
 
 Return ONLY valid JSON in this exact format (no markdown, no explanation):
@@ -131,6 +159,7 @@ Extract as much as possible. Use null for unknown deadlines. Return ONLY the JSO
 SYLLABUS TEXT:
 ${pdfText}`;
 
+      // functions.invoke sends the user's login token along automatically.
       const { data: claudeData, error: fnError } = await supabase.functions.invoke("claude-proxy", {
         body: { prompt },
       });
@@ -148,7 +177,8 @@ ${pdfText}`;
 
       const content = claudeData?.text || "";
 
-      // 3. Parse JSON response
+      // 3. Parse the JSON response. Strip ```json code fences first, in case
+      // Claude wrapped its answer in markdown despite being told not to.
       let parsed: { assignments: Assignment[]; topics: Topic[] };
       try {
         const cleaned = content.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
@@ -160,7 +190,8 @@ ${pdfText}`;
         return;
       }
 
-      // 4. Save to Supabase — get fresh user from auth
+      // 4. Save to Supabase. Re-check the login with the server first: the AI step can
+      // take a while, and the session may have expired in the meantime.
       const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
       if (authError || !authUser) {
         console.error("Auth error - cannot save:", authError);
@@ -170,6 +201,8 @@ ${pdfText}`;
       }
       console.log("✅ Authenticated user:", authUser.id);
 
+      // Insert rows one at a time, so one bad row doesn't block the rest. Failures are
+      // only logged to the console. user_id must equal the logged-in user, or RLS rejects the insert.
       if (parsed.assignments?.length) {
         for (const a of parsed.assignments) {
           const { error: aErr } = await supabase.from("assignments").insert({
@@ -197,7 +230,7 @@ ${pdfText}`;
         }
       }
 
-      // 5. Display results
+      // 5. Display results (what Claude found, even if some rows failed to save)
       setResults({
         assignments_count: parsed.assignments?.length || 0,
         topics_count: parsed.topics?.length || 0,
@@ -213,6 +246,8 @@ ${pdfText}`;
     }
   };
 
+  // Toggle a topic's "weak area" flag. This is an "optimistic update": the button changes
+  // instantly, the database is updated after, and the change is undone if the save fails.
   const handleFlagWeakArea = async (topic: Topic) => {
     if (!user) return;
     const key = `${topic.week_number}-${topic.topic_name}`;
@@ -230,7 +265,8 @@ ${pdfText}`;
 
     const isFlagging = !flaggedTopics.has(key);
 
-    // Update in DB
+    // Update in DB. Topics are matched by user + course + name, since the inserted
+    // rows' ids weren't kept. Flags every copy if the same syllabus was uploaded twice.
     const { error } = await supabase
       .from("topics")
       .update({ is_weak_area: isFlagging })
@@ -265,6 +301,7 @@ ${pdfText}`;
         </p>
       </div>
 
+      {/* Input form: course name + PDF drop zone + extract button */}
       <Card className="p-6 space-y-6">
         <div className="space-y-2">
           <Label htmlFor="courseName">Course Name</Label>
@@ -279,6 +316,7 @@ ${pdfText}`;
 
         <div className="space-y-2">
           <Label>Syllabus PDF</Label>
+          {/* Drop zone: click to open the hidden file input, or drag a PDF onto it */}
           <div
             onClick={() => !loading && fileInputRef.current?.click()}
             onDragOver={handleDragOver}
@@ -334,7 +372,7 @@ ${pdfText}`;
         </Button>
       </Card>
 
-      {/* Results */}
+      {/* Results: only shown after a successful extraction */}
       {results && (
         <div className="space-y-6">
           {/* Assignments Table */}
@@ -386,7 +424,7 @@ ${pdfText}`;
             </Card>
           )}
 
-          {/* Topics Table */}
+          {/* Topics Table, with a weak-area toggle on each row */}
           {results.topics.length > 0 && (
             <Card className="p-6">
               <div className="flex items-center gap-2 mb-4">
