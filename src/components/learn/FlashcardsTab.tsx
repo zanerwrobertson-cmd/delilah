@@ -152,6 +152,8 @@ export function FlashcardsTab({ flashcards, loading, onGenerate }: FlashcardsTab
   }
 
   const card = cards[current];
+  // The deck is filled by an effect, so the render right after cards arrive has no current card yet.
+  if (!card) return null;
   const retiredCount = retired.size;
   const progressPct = cards.length > 0 ? (retiredCount / cards.length) * 100 : 0;
 

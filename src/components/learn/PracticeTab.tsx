@@ -198,6 +198,9 @@ export function PracticeTab({ practice, setId, loading, onGenerate }: PracticeTa
     );
   }
 
+  // Out of range while state catches up to a new question set.
+  if (!currentQ) return null;
+
   const answered = currentSt.status !== "unanswered" && currentSt.status !== "answered_short";
   const canNext =
     currentSt.status === "answered_mcq" ||
