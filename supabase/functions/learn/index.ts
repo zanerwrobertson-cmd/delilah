@@ -28,15 +28,16 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const CLAUDE_API_KEY = Deno.env.get("CLAUDE_API_KEY");
-const CLAUDE_MODEL   = Deno.env.get("CLAUDE_MODEL") ?? "claude-sonnet-4-20250514";
+const CLAUDE_API_KEY = Deno.env.get("CLAUDE_API_KEY")?.trim();
+const CLAUDE_MODEL   = Deno.env.get("CLAUDE_MODEL") ?? "claude-sonnet-5-5";
 const SUPABASE_URL   = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 const MAX_MATERIAL_CHARS = 550_000;
 
 // ---------------------------------------------------------------------------
-// Tool definitions (structured output via tool_choice: forced)
+// Tool definitions (structured output: tool_choice auto + prompt names the tool;
+// claude-sonnet-5-5 rejects forced tool_choice "tool"/"any")
 // ---------------------------------------------------------------------------
 
 const TOOL_GUIDE = {
@@ -196,8 +197,6 @@ async function callClaude(body: Record<string, unknown>) {
       "Content-Type": "application/json",
       "x-api-key": CLAUDE_API_KEY!,
       "anthropic-version": "2023-06-01",
-      // Enable prompt caching for the system block.
-      "anthropic-beta": "prompt-caching-2024-07-31",
     },
     body: JSON.stringify(body),
   });
@@ -257,10 +256,10 @@ Deno.serve(async (req) => {
         model: CLAUDE_MODEL,
         max_tokens: 1000,
         tools: [TOOL_GRADE],
-        tool_choice: { type: "tool", name: "grade_answer" },
+        tool_choice: { type: "auto" },
         messages: [{
           role: "user",
-          content: `Grade this student answer.\n\nQuestion: ${question}\nModel answer: ${modelAnswer}\nStudent answer: ${studentAnswer}`,
+          content: `Grade this student answer using the grade_answer tool.\n\nQuestion: ${question}\nModel answer: ${modelAnswer}\nStudent answer: ${studentAnswer}`,
         }],
       });
       const toolUse = claudeRes.content?.find((b: { type: string }) => b.type === "tool_use");
@@ -337,7 +336,7 @@ Deno.serve(async (req) => {
         max_tokens: 7000,
         system: [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }],
         tools: [TOOL_GUIDE],
-        tool_choice: { type: "tool", name: "save_guide" },
+        tool_choice: { type: "auto" },
         messages: [{ role: "user", content: "Generate the study guide using the save_guide tool." }],
       });
       const toolUse = claudeRes.content?.find((b: { type: string }) => b.type === "tool_use");
@@ -375,7 +374,7 @@ Deno.serve(async (req) => {
         max_tokens: 6000,
         system: [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }],
         tools: [TOOL_FLASHCARDS],
-        tool_choice: { type: "tool", name: "save_flashcards" },
+        tool_choice: { type: "auto" },
         messages: [{ role: "user", content: "Generate flashcards using the save_flashcards tool." }],
       });
       const toolUse = claudeRes.content?.find((b: { type: string }) => b.type === "tool_use");
@@ -414,7 +413,7 @@ Deno.serve(async (req) => {
         max_tokens: 6000,
         system: [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }],
         tools: [TOOL_PRACTICE],
-        tool_choice: { type: "tool", name: "save_practice" },
+        tool_choice: { type: "auto" },
         messages: [{ role: "user", content: "Generate the practice questions using the save_practice tool." }],
       });
       const toolUse = claudeRes.content?.find((b: { type: string }) => b.type === "tool_use");

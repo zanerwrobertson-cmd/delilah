@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const CLAUDE_API_KEY = Deno.env.get("CLAUDE_API_KEY");
+    const CLAUDE_API_KEY = Deno.env.get("CLAUDE_API_KEY")?.trim();
     if (!CLAUDE_API_KEY) {
       return new Response(
         JSON.stringify({ error: "CLAUDE_API_KEY not configured" }),
@@ -84,7 +84,7 @@ Do NOT wrap in markdown code blocks. Return raw JSON only.`;
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: Deno.env.get("CLAUDE_MODEL") ?? "claude-sonnet-5-5",
         max_tokens: 4000,
         messages: [{ role: "user", content: prompt }],
       }),
@@ -100,7 +100,7 @@ Do NOT wrap in markdown code blocks. Return raw JSON only.`;
     }
 
     const data = await claudeResponse.json();
-    const text = data.content?.[0]?.text || "";
+    const text = data.content?.find((b: { type: string }) => b.type === "text")?.text || "";
 
     // Parse the JSON array from Claude's response.
     // The regex grabs everything from the first "[" to the last "]", in case Claude

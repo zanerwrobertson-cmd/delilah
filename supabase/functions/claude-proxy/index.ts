@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
 
   try {
     // Set with: npx supabase secrets set CLAUDE_API_KEY=...
-    const CLAUDE_API_KEY = Deno.env.get("CLAUDE_API_KEY");
+    const CLAUDE_API_KEY = Deno.env.get("CLAUDE_API_KEY")?.trim();
     if (!CLAUDE_API_KEY) {
       return new Response(
         JSON.stringify({ error: "CLAUDE_API_KEY not configured" }),
@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: Deno.env.get("CLAUDE_MODEL") ?? "claude-sonnet-5-5",
         max_tokens: 4000,
         messages: [{ role: "user", content: prompt }],
       }),
@@ -78,9 +78,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Claude returns a list of content blocks; the reply text is in the first one.
+    // Claude returns a list of content blocks; take the first text block (thinking blocks may come first).
     const data = await claudeResponse.json();
-    const text = data.content?.[0]?.text || "";
+    const text = data.content?.find((b: { type: string }) => b.type === "text")?.text || "";
 
     return new Response(
       JSON.stringify({ text }),

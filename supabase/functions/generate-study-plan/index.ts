@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const CLAUDE_API_KEY = Deno.env.get("CLAUDE_API_KEY");
+    const CLAUDE_API_KEY = Deno.env.get("CLAUDE_API_KEY")?.trim();
     if (!CLAUDE_API_KEY) {
       return new Response(
         JSON.stringify({ error: "CLAUDE_API_KEY not configured" }),
@@ -109,7 +109,7 @@ Respond ONLY with valid JSON (no markdown, no backticks, no explanation) in this
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: Deno.env.get("CLAUDE_MODEL") ?? "claude-sonnet-5-5",
         max_tokens: 8000,
         messages: [{ role: "user", content: prompt }],
       }),
@@ -125,7 +125,7 @@ Respond ONLY with valid JSON (no markdown, no backticks, no explanation) in this
     }
 
     const data = await claudeResponse.json();
-    const text = data.content?.[0]?.text || "";
+    const text = data.content?.find((b: { type: string }) => b.type === "text")?.text || "";
 
     // Extract the JSON array from the response (first "[" to last "]"),
     // ignoring any extra text Claude might add around it.
