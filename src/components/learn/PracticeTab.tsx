@@ -127,7 +127,7 @@ export function PracticeTab({ practice, setId, loading, onGenerate }: PracticeTa
     );
   }
 
-  if (!practice) {
+  if (!questions.length) {
     return (
       <div className="flex flex-col items-center gap-4 py-20 text-muted-foreground">
         <GraduationCap className="h-10 w-10 opacity-30" />
@@ -233,7 +233,7 @@ export function PracticeTab({ practice, setId, loading, onGenerate }: PracticeTa
         {isMcq(currentQ) ? (
           /* MCQ */
           <div className="space-y-2">
-            {currentQ.options.map((opt, oi) => {
+            {(currentQ.options ?? []).map((opt, oi) => {
               const st = currentSt;
               let style = "border-border hover:border-primary/40 hover:bg-muted/30 cursor-pointer";
               if (st.status === "answered_mcq") {

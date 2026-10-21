@@ -112,7 +112,7 @@ export function FlashcardsTab({ flashcards, loading, onGenerate }: FlashcardsTab
     );
   }
 
-  if (!flashcards) {
+  if (!cards.length) {
     return (
       <div className="flex flex-col items-center gap-4 py-20 text-muted-foreground">
         <Brain className="h-10 w-10 opacity-30" />

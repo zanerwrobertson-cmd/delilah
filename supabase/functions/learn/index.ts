@@ -35,6 +35,9 @@ const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 const MAX_MATERIAL_CHARS = 550_000;
 
+// A reply that hit max_tokens has a half-written tool input; never save it.
+const TRUNCATED_MSG = "The AI's reply was cut off before it finished. Please try again.";
+
 // ---------------------------------------------------------------------------
 // Tool definitions (structured output: tool_choice auto + prompt names the tool;
 // claude-sonnet-5-5 rejects forced tool_choice "tool"/"any")
@@ -254,7 +257,7 @@ Deno.serve(async (req) => {
     try {
       const claudeRes = await callClaude({
         model: CLAUDE_MODEL,
-        max_tokens: 1000,
+        max_tokens: 4000,
         tools: [TOOL_GRADE],
         tool_choice: { type: "auto" },
         messages: [{
@@ -263,6 +266,7 @@ Deno.serve(async (req) => {
         }],
       });
       const toolUse = claudeRes.content?.find((b: { type: string }) => b.type === "tool_use");
+      if (claudeRes.stop_reason === "max_tokens") return errRes(TRUNCATED_MSG);
       if (!toolUse) return errRes("No grade result from AI");
       return okRes(toolUse.input);
     } catch (e: unknown) {
@@ -333,13 +337,14 @@ Deno.serve(async (req) => {
     try {
       const claudeRes = await callClaude({
         model: CLAUDE_MODEL,
-        max_tokens: 7000,
+        max_tokens: 16000,
         system: [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }],
         tools: [TOOL_GUIDE],
         tool_choice: { type: "auto" },
         messages: [{ role: "user", content: "Generate the study guide using the save_guide tool." }],
       });
       const toolUse = claudeRes.content?.find((b: { type: string }) => b.type === "tool_use");
+      if (claudeRes.stop_reason === "max_tokens") return errRes(TRUNCATED_MSG);
       if (!toolUse) return errRes("No guide returned by AI");
 
       const guide = toolUse.input;
@@ -371,13 +376,14 @@ Deno.serve(async (req) => {
     try {
       const claudeRes = await callClaude({
         model: CLAUDE_MODEL,
-        max_tokens: 6000,
+        max_tokens: 16000,
         system: [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }],
         tools: [TOOL_FLASHCARDS],
         tool_choice: { type: "auto" },
         messages: [{ role: "user", content: "Generate flashcards using the save_flashcards tool." }],
       });
       const toolUse = claudeRes.content?.find((b: { type: string }) => b.type === "tool_use");
+      if (claudeRes.stop_reason === "max_tokens") return errRes(TRUNCATED_MSG);
       if (!toolUse) return errRes("No flashcards returned by AI");
 
       const flashcards = toolUse.input;
@@ -410,13 +416,14 @@ Deno.serve(async (req) => {
     try {
       const claudeRes = await callClaude({
         model: CLAUDE_MODEL,
-        max_tokens: 6000,
+        max_tokens: 16000,
         system: [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }],
         tools: [TOOL_PRACTICE],
         tool_choice: { type: "auto" },
         messages: [{ role: "user", content: "Generate the practice questions using the save_practice tool." }],
       });
       const toolUse = claudeRes.content?.find((b: { type: string }) => b.type === "tool_use");
+      if (claudeRes.stop_reason === "max_tokens") return errRes(TRUNCATED_MSG);
       if (!toolUse) return errRes("No practice questions returned by AI");
 
       const practice = toolUse.input;
@@ -469,7 +476,7 @@ Deno.serve(async (req) => {
     try {
       const claudeRes = await callClaude({
         model: CLAUDE_MODEL,
-        max_tokens: 2500,
+        max_tokens: 8000,
         system: [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }],
         messages: priorMessages,
       });
