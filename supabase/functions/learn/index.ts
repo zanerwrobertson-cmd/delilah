@@ -45,26 +45,25 @@ const TRUNCATED_MSG = "The AI's reply was cut off before it finished. Please try
 
 const TOOL_GUIDE = {
   name: "save_guide",
-  description: "Save the complete study guide for the uploaded course material.",
+  description: "Save the study guide plan: overview, section outline, and the reference material (terms, formulas, mistakes, exam focus, connections).",
   input_schema: {
     type: "object",
     properties: {
       overview: {
         type: "string",
-        description: "Big-picture overview of the material (2-3 paragraphs).",
+        description: "Big-picture overview in markdown (3-5 paragraphs): what the material is about, why it matters, and how the ideas fit together.",
       },
       sections: {
         type: "array",
-        description: "Key topics in the best learning order.",
+        description: "5-10 topics in the best learning order that together cover the material.",
         items: {
           type: "object",
           properties: {
-            title:       { type: "string" },
-            explanation: { type: "string", description: "Markdown explanation with intuitive examples." },
-            key_points:  { type: "array", items: { type: "string" } },
-            source:      { type: "string", description: "e.g. 'Page 12-15' or 'Slides 3-5'" },
+            title:  { type: "string" },
+            scope:  { type: "string", description: "Exactly which concepts, mechanisms, examples and details this section must teach." },
+            source: { type: "string", description: "e.g. 'Page 12-15' or 'Slides 3-5'" },
           },
-          required: ["title", "explanation", "key_points"],
+          required: ["title", "scope"],
         },
       },
       key_terms: {
@@ -95,12 +94,12 @@ const TOOL_GUIDE = {
       common_mistakes: {
         type: "array",
         items: { type: "string" },
-        description: "Mistakes students commonly make with this material.",
+        description: "Specific misconceptions or errors students make, each with why it is wrong.",
       },
       exam_focus: {
         type: "array",
         items: { type: "string" },
-        description: "Concepts most likely to appear on an exam.",
+        description: "Concepts most likely to be tested, and the kind of question to expect for each.",
       },
       connections: {
         type: "array",
@@ -111,6 +110,42 @@ const TOOL_GUIDE = {
     required: ["overview", "sections", "key_terms", "common_mistakes", "exam_focus"],
   },
 };
+
+const TOOL_SECTION = {
+  name: "save_section",
+  description: "Save one fully written section of the study guide.",
+  input_schema: {
+    type: "object",
+    properties: {
+      explanation: {
+        type: "string",
+        description: "The in-depth markdown lesson for this section, with ### subheadings and source citations.",
+      },
+      key_points: { type: "array", items: { type: "string" }, description: "4-8 crisp takeaways." },
+      worked_example: {
+        type: "string",
+        description: "Markdown: a fully worked, step-by-step example or application of this section's ideas.",
+      },
+      check_questions: {
+        type: "array",
+        description: "3-5 questions that test understanding, not recall.",
+        items: {
+          type: "object",
+          properties: {
+            question: { type: "string" },
+            answer:   { type: "string", description: "Full answer with reasoning." },
+          },
+          required: ["question", "answer"],
+        },
+      },
+    },
+    required: ["explanation", "key_points", "worked_example", "check_questions"],
+  },
+};
+
+// Outline and section calls send the same tools + material block, so the
+// parallel section calls read the material from the prompt cache.
+const GUIDE_TOOLS = [TOOL_GUIDE, TOOL_SECTION];
 
 const TOOL_FLASHCARDS = {
   name: "save_flashcards",
@@ -320,34 +355,87 @@ Deno.serve(async (req) => {
   // guide
   // ---------------------------------------------------------------------------
   if (action === "guide") {
-    const systemText =
-      `You are Delilah, an expert tutor. Produce a thorough, intuitive study guide from the course material below.\n` +
-      `Student learning style: ${learningStyle}${focusNote}\n\n` +
-      `Guidelines:\n` +
-      `- Overview: big picture in 2-3 paragraphs\n` +
-      `- Sections in the best learning order, with markdown explanations, intuitive real-world examples, bullet key points, and source/page citations\n` +
-      `- Key terms: definitions + concrete examples\n` +
-      `- Formulas: LaTeX only if the material contains them\n` +
-      `- Common mistakes students make\n` +
-      `- What is most likely on an exam\n` +
-      `- Connections between topics\n` +
-      `Keep the total guide under ~3000 words.\n\n` +
-      `MATERIAL:\n${materialContext}`;
+    const system = [
+      { type: "text", text: `MATERIAL:\n${materialContext}`, cache_control: { type: "ephemeral" } },
+      {
+        type: "text",
+        text:
+          `You are Delilah, an expert tutor writing an in-depth study guide from the course material above.\n` +
+          `Student learning style: ${learningStyle}${focusNote}\n\n` +
+          `Write for a student who wants to genuinely understand this material, not skim it. Build intuition first, ` +
+          `then precise detail. Explain the why behind every idea, not just the what. Use concrete examples from the ` +
+          `material and from the real world. Cite sources ("Page 12", "Slide 3") wherever you can. Use markdown, and ` +
+          `LaTeX ($...$) for math.`,
+      },
+    ];
+    const toolInput = (res: { content?: { type: string; name?: string; input?: unknown }[] }, name: string) =>
+      res.content?.find((b) => b.type === "tool_use" && b.name === name)?.input as Record<string, unknown> | undefined;
 
     try {
-      const claudeRes = await callClaude({
+      // 1. Plan: overview, section scopes, and the reference lists.
+      const outlineRes = await callClaude({
         model: CLAUDE_MODEL,
         max_tokens: 16000,
-        system: [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }],
-        tools: [TOOL_GUIDE],
+        system,
+        tools: GUIDE_TOOLS,
         tool_choice: { type: "auto" },
-        messages: [{ role: "user", content: "Generate the study guide using the save_guide tool." }],
+        messages: [{
+          role: "user",
+          content:
+            `Plan the study guide and save it using the save_guide tool.\n` +
+            `- overview: the big picture: what this is about, why it matters, how the ideas fit together, and the storyline to hold onto.\n` +
+            `- sections: 5-10 topics in learning order that together cover all of the material${effectiveFocus ? " within the student's focus" : ""}. ` +
+            `Each scope must list exactly what that section teaches, because each section will be written separately; avoid gaps and overlaps.\n` +
+            `- key_terms: every important term, with a precise definition and a concrete example.\n` +
+            `- formulas: every formula in the material, in LaTeX, with what each symbol means and when to use it (omit if none).\n` +
+            `- common_mistakes, exam_focus, connections: specific to this material, never generic study advice.`,
+        }],
       });
-      const toolUse = claudeRes.content?.find((b: { type: string }) => b.type === "tool_use");
-      if (claudeRes.stop_reason === "max_tokens") return errRes(TRUNCATED_MSG);
-      if (!toolUse) return errRes("No guide returned by AI");
+      if (outlineRes.stop_reason === "max_tokens") return errRes(TRUNCATED_MSG);
+      const outline = toolInput(outlineRes, "save_guide");
+      if (!outline) return errRes("No guide returned by AI");
 
-      const guide = toolUse.input;
+      type PlannedSection = { title: string; scope: string; source?: string };
+      const planned = (outline.sections as PlannedSection[] | undefined) ?? [];
+      const outlineList = planned.map((p, i) => `${i + 1}. ${p.title}: ${p.scope}`).join("\n");
+
+      // 2. Write every section in parallel; a failed section becomes a placeholder, not a failed guide.
+      const sections = await Promise.all(planned.map(async (p, i) => {
+        const base = { title: p.title, source: p.source };
+        try {
+          const res = await callClaude({
+            model: CLAUDE_MODEL,
+            max_tokens: 16000,
+            system,
+            tools: GUIDE_TOOLS,
+            tool_choice: { type: "auto" },
+            messages: [{
+              role: "user",
+              content:
+                `Write one section of the study guide and save it using the save_section tool.\n\n` +
+                `Full outline (the other sections are written separately; don't repeat their content):\n${outlineList}\n\n` +
+                `Write section ${i + 1}: "${p.title}"${p.source ? ` (${p.source})` : ""}\nIt must teach: ${p.scope}\n\n` +
+                `- explanation: a thorough lesson, typically 600-1200 words. Open with the intuition or a motivating question, ` +
+                `then teach each concept in depth with the reasoning behind it, walk through mechanisms step by step, and cite sources. ` +
+                `No padding: every paragraph should teach something.\n` +
+                `- worked_example: fully worked, step by step, using the material's own examples or data where possible.\n` +
+                `- check_questions: questions that make the student apply or explain the ideas, each with a full answer.`,
+            }],
+          });
+          const body = res.stop_reason === "max_tokens" ? undefined : toolInput(res, "save_section");
+          if (!body) throw new Error("no section returned");
+          return { ...base, ...body };
+        } catch (e) {
+          console.error(`guide section ${i + 1} failed:`, (e as Error).message);
+          return {
+            ...base,
+            explanation: "_This section couldn't be generated. Regenerate the breakdown to try again._",
+            key_points: [],
+          };
+        }
+      }));
+
+      const guide = { ...outline, sections };
       const { error: saveErr } = await db
         .from("study_sets")
         .update({ guide, updated_at: new Date().toISOString() })
