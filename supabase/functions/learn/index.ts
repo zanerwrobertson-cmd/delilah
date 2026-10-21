@@ -269,8 +269,9 @@ Deno.serve(async (req) => {
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return errRes("Invalid JSON", 400); }
 
-  const { action, setId, message, mode, focus, question, modelAnswer, studentAnswer } = body as {
+  const { action, setId, message, mode, focus, difficulty, question, modelAnswer, studentAnswer } = body as {
     action: string;
+    difficulty?: string;
     setId?: string;
     message?: string;
     mode?: string;
@@ -491,13 +492,22 @@ Deno.serve(async (req) => {
   // practice
   // ---------------------------------------------------------------------------
   if (action === "practice") {
+    // Untrusted input: only the three known levels reach the prompt.
+    const level = ({
+      easy:   "recall and basic understanding of the core definitions and ideas, in straightforward wording; MCQ distractors are clearly wrong to a student who studied",
+      medium: "applying concepts to familiar situations and explaining why; MCQ distractors are plausible",
+      hard:   "multi-step reasoning, applying ideas to new scenarios, combining or comparing concepts, and edge cases; MCQ distractors reflect common misconceptions",
+    } as Record<string, string>)[difficulty ?? ""];
+    const difficultyRule = level
+      ? `- Every question is ${difficulty} difficulty (set difficulty: "${difficulty}"): ${level}\n`
+      : `- Order easy to hard overall\n`;
     const systemText =
       `You are Delilah, an expert tutor. Create a 10-question practice set from the course material below.${focusNote}\n\n` +
       `Requirements:\n` +
       `- Exactly 6 multiple-choice questions (4 options each, correctIndex 0-3)\n` +
       `- Exactly 4 short-answer questions\n` +
       `- Each question has: full answer, detailed explanation (MCQ: explain why each wrong option is wrong too), topic, difficulty\n` +
-      `- Order easy to hard overall\n` +
+      difficultyRule +
       `- Cover a range of topics from the material\n\n` +
       `MATERIAL:\n${materialContext}`;
 
@@ -514,7 +524,7 @@ Deno.serve(async (req) => {
       if (claudeRes.stop_reason === "max_tokens") return errRes(TRUNCATED_MSG);
       if (!toolUse) return errRes("No practice questions returned by AI");
 
-      const practice = toolUse.input;
+      const practice = level ? { ...toolUse.input, difficulty } : toolUse.input;
       const { error: saveErr } = await db
         .from("study_sets")
         .update({ practice, updated_at: new Date().toISOString() })

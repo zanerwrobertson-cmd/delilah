@@ -4,7 +4,7 @@
  * MCQ: shows 4 options; on submit reveals correct/incorrect + explanation.
  * Short answer: textarea + "Grade" button; calls the learn edge function's
  * "grade" action and shows verdict + model answer.
- * Score summary at the end.
+ * Score summary at the end. The student picks easy / medium / hard to generate a set.
  */
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -18,13 +18,28 @@ import { toast } from "sonner";
 import {
   CheckCircle2, XCircle, Loader2, GraduationCap, RefreshCw,
 } from "lucide-react";
-import type { Practice, PracticeQuestion, MCQQuestion } from "@/types/learn";
+import type { Practice, PracticeQuestion, MCQQuestion, Difficulty } from "@/types/learn";
 
 interface PracticeTabProps {
   practice: Practice | null;
   setId: string;
   loading: boolean;
-  onGenerate: () => void;
+  onGenerate: (difficulty: Difficulty) => void;
+}
+
+const DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard"];
+
+function DifficultyPicker({ onPick, label }: { onPick: (d: Difficulty) => void; label: string }) {
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2">
+      <span className="text-sm text-muted-foreground">{label}</span>
+      {DIFFICULTIES.map((d) => (
+        <Button key={d} variant="outline" size="sm" className="capitalize" onClick={() => onPick(d)}>
+          {d}
+        </Button>
+      ))}
+    </div>
+  );
 }
 
 type QuestionState =
@@ -58,9 +73,12 @@ export function PracticeTab({ practice, setId, loading, onGenerate }: PracticeTa
   const [shortInputs, setShortInputs] = useState<Record<number, string>>({});
   const [done, setDone]               = useState(false);
 
-  // Initialise states array when practice loads
-  if (questions.length > 0 && states.length !== questions.length) {
+  // Reset progress whenever a new practice set arrives (same length or not)
+  const [shownPractice, setShownPractice] = useState<Practice | null>(null);
+  if (practice !== shownPractice) {
+    setShownPractice(practice);
     setStates(questions.map(() => ({ status: "unanswered" })));
+    setShortInputs({});
     setIdx(0);
     setDone(false);
   }
@@ -132,7 +150,7 @@ export function PracticeTab({ practice, setId, loading, onGenerate }: PracticeTa
       <div className="flex flex-col items-center gap-4 py-20 text-muted-foreground">
         <GraduationCap className="h-10 w-10 opacity-30" />
         <p className="text-sm">No practice questions yet.</p>
-        <Button onClick={onGenerate}>Generate practice</Button>
+        <DifficultyPicker label="Generate a quiz:" onPick={onGenerate} />
       </div>
     );
   }
@@ -194,6 +212,7 @@ export function PracticeTab({ practice, setId, loading, onGenerate }: PracticeTa
           <RefreshCw className="h-4 w-4" />
           Try again
         </Button>
+        <DifficultyPicker label="New quiz:" onPick={onGenerate} />
       </div>
     );
   }
@@ -311,6 +330,10 @@ export function PracticeTab({ practice, setId, loading, onGenerate }: PracticeTa
           </Button>
         </div>
       )}
+
+      <div className="border-t border-border pt-4">
+        <DifficultyPicker label="Start a new quiz:" onPick={onGenerate} />
+      </div>
     </div>
   );
 }
