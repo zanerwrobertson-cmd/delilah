@@ -212,6 +212,102 @@ export type Database = {
         }
         Relationships: []
       }
+      study_materials: {
+        Row: {
+          id: string
+          set_id: string
+          user_id: string
+          file_name: string
+          kind: string
+          content: string
+          char_count: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          set_id: string
+          user_id: string
+          file_name: string
+          kind: string
+          content: string
+          char_count?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          set_id?: string
+          user_id?: string
+          file_name?: string
+          kind?: string
+          content?: string
+          char_count?: number
+          created_at?: string
+        }
+        Relationships: []
+      }
+      study_messages: {
+        Row: {
+          id: string
+          set_id: string
+          user_id: string
+          role: string
+          content: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          set_id: string
+          user_id: string
+          role: string
+          content: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          set_id?: string
+          user_id?: string
+          role?: string
+          content?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      study_sets: {
+        Row: {
+          id: string
+          user_id: string
+          title: string
+          course_name: string | null
+          guide: Json | null
+          flashcards: Json | null
+          practice: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          title: string
+          course_name?: string | null
+          guide?: Json | null
+          flashcards?: Json | null
+          practice?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          title?: string
+          course_name?: string | null
+          guide?: Json | null
+          flashcards?: Json | null
+          practice?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
