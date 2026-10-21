@@ -308,7 +308,10 @@ Deno.serve(async (req) => {
     .single();
   const learningStyle = profile?.learning_style ?? "standard";
 
-  const focusNote = focus ? `\n\nFocus only on: ${focus}` : "";
+  // A one-off focus from the request overrides the set's saved focus.
+  const { data: setRow } = await db.from("study_sets").select("focus").eq("id", setId).single();
+  const effectiveFocus = (focus || setRow?.focus || "").trim();
+  const focusNote = effectiveFocus ? `\n\nThe student asked you to focus on: ${effectiveFocus}` : "";
 
   // ---------------------------------------------------------------------------
   // guide
@@ -461,7 +464,7 @@ Deno.serve(async (req) => {
       `- Cite sources (e.g. "Page 12", "Slide 3") whenever possible\n` +
       `- If the student asks about something not in the material, acknowledge it and answer from general knowledge\n` +
       `- End every response with a brief check-for-understanding question\n` +
-      `- Keep responses focused and conversational\n\n` +
+      `- Keep responses focused and conversational${focusNote}\n\n` +
       `MATERIAL:\n${materialContext}`;
 
     try {

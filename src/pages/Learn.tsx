@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -47,6 +48,7 @@ export default function Learn() {
   // Form state
   const [title, setTitle]             = useState("");
   const [courseName, setCourseName]   = useState("");
+  const [focus, setFocus]             = useState("");
   const [materials, setMaterials]     = useState<ExtractedMaterial[]>([]);
   const [saving, setSaving]           = useState(false);
   const [courseOptions, setCourseOptions] = useState<string[]>([]);
@@ -97,6 +99,7 @@ export default function Learn() {
           user_id:     user.id,
           title:       title.trim(),
           course_name: courseName.trim() || null,
+          focus:       focus.trim() || null,
         })
         .select("id")
         .single();
@@ -124,6 +127,7 @@ export default function Learn() {
   const handleOpenDialog = () => {
     setTitle("");
     setCourseName("");
+    setFocus("");
     setMaterials([]);
     setDialogOpen(true);
   };
@@ -261,6 +265,19 @@ export default function Learn() {
             <div className="space-y-2">
               <Label>Material</Label>
               <MaterialInput value={materials} onChange={setMaterials} disabled={saving} />
+            </div>
+
+            {/* Focus */}
+            <div className="space-y-2">
+              <Label htmlFor="set-focus">What should Delilah focus on? (optional)</Label>
+              <Textarea
+                id="set-focus"
+                placeholder="e.g. only chapters 3-4, the formulas, what's likely on the midterm…"
+                value={focus}
+                onChange={(e) => setFocus(e.target.value)}
+                disabled={saving}
+                rows={2}
+              />
             </div>
 
             {/* Submit */}

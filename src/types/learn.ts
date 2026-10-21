@@ -79,6 +79,7 @@ export interface StudySetRow {
   id: string;
   title: string;
   course_name: string | null;
+  focus: string | null;
   guide: Guide | null;
   flashcards: Flashcards | null;
   practice: Practice | null;
