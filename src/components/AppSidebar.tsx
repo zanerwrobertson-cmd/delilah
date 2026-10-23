@@ -1,4 +1,4 @@
-import { LayoutDashboard, CalendarDays, HelpCircle, GraduationCap, Settings, LogOut, BookOpen, Upload } from "lucide-react";
+import { LayoutDashboard, CalendarDays, HelpCircle, GraduationCap, Settings, LogOut, BookOpen, Upload, Brain } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
@@ -25,6 +25,7 @@ const navItems = [
   { title: "Study Plan", url: "/dashboard/study-plan", icon: CalendarDays },
   { title: "Quiz Me", url: "/dashboard/quiz", icon: HelpCircle },
   { title: "Exam Prep", url: "/dashboard/exam-prep", icon: GraduationCap },
+  { title: "Learn", url: "/dashboard/learn", icon: Brain },
   { title: "Upload Syllabus", url: "/dashboard/upload-syllabus", icon: Upload },
   { title: "Settings", url: "/dashboard/settings", icon: Settings },
 ];

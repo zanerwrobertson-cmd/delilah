@@ -30,6 +30,8 @@ import QuizMe from "./pages/QuizMe";
 import ExamPrep from "./pages/ExamPrep";
 import SettingsPage from "./pages/SettingsPage";
 import UploadSyllabus from "./pages/UploadSyllabus";
+import Learn from "./pages/Learn";
+import LearnStudySet from "./pages/LearnStudySet";
 import NotFound from "./pages/NotFound";
 
 // React Query cache, available app-wide (pages currently call Supabase directly).
@@ -61,6 +63,8 @@ const App = () => (
               <Route path="study-plan" element={<StudyPlan />} />
               <Route path="quiz" element={<QuizMe />} />
               <Route path="exam-prep" element={<ExamPrep />} />
+              <Route path="learn" element={<Learn />} />
+              <Route path="learn/:id" element={<LearnStudySet />} />
               <Route path="upload-syllabus" element={<UploadSyllabus />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>
