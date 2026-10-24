@@ -278,6 +278,7 @@ export type Database = {
           user_id: string
           title: string
           course_name: string | null
+          focus: string | null
           guide: Json | null
           flashcards: Json | null
           practice: Json | null
@@ -289,6 +290,7 @@ export type Database = {
           user_id: string
           title: string
           course_name?: string | null
+          focus?: string | null
           guide?: Json | null
           flashcards?: Json | null
           practice?: Json | null
@@ -300,6 +302,7 @@ export type Database = {
           user_id?: string
           title?: string
           course_name?: string | null
+          focus?: string | null
           guide?: Json | null
           flashcards?: Json | null
           practice?: Json | null

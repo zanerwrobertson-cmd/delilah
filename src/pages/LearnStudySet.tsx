@@ -18,6 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,7 +41,7 @@ import { PracticeTab }   from "@/components/learn/PracticeTab";
 import { TutorTab }      from "@/components/learn/TutorTab";
 import { MaterialsTab }  from "@/components/learn/MaterialsTab";
 import { toast } from "sonner";
-import { ArrowLeft, MoreHorizontal, Pencil, Trash2, Loader2 } from "lucide-react";
+import { ArrowLeft, MoreHorizontal, Pencil, Trash2, Loader2, Target } from "lucide-react";
 import type { StudySetRow, StudyMaterialRow, StudyMessage } from "@/types/learn";
 
 export default function LearnStudySet() {
@@ -63,6 +64,11 @@ export default function LearnStudySet() {
   const [newTitle, setNewTitle]   = useState("");
   const [savingTitle, setSavingTitle] = useState(false);
 
+  // Focus edit state
+  const [editingFocus, setEditingFocus] = useState(false);
+  const [newFocus, setNewFocus]         = useState("");
+  const [savingFocus, setSavingFocus]   = useState(false);
+
   // Delete confirmation
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting]     = useState(false);
@@ -71,7 +77,7 @@ export default function LearnStudySet() {
     if (!id) return;
     const { data, error } = await supabase
       .from("study_sets")
-      .select("id, title, course_name, guide, flashcards, practice, created_at, updated_at")
+      .select("id, title, course_name, focus, guide, flashcards, practice, created_at, updated_at")
       .eq("id", id)
       .single();
     if (error) { toast.error(error.message); navigate("/dashboard/learn"); return; }
@@ -164,6 +170,22 @@ export default function LearnStudySet() {
     setSavingTitle(false);
   };
 
+  // Focus — saving regenerates everything so it takes effect
+  const handleSaveFocus = async () => {
+    if (!id) return;
+    const focus = newFocus.trim() || null;
+    setSavingFocus(true);
+    const { error } = await supabase
+      .from("study_sets")
+      .update({ focus, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    setSavingFocus(false);
+    if (error) { toast.error(error.message); return; }
+    setSet((prev) => prev ? { ...prev, focus } : prev);
+    setEditingFocus(false);
+    handleRegenerateAll();
+  };
+
   // Delete
   const handleDelete = async () => {
     if (!id) return;
@@ -225,6 +247,33 @@ export default function LearnStudySet() {
               )}
             </div>
           )}
+
+          {editingFocus ? (
+            <div className="mt-3 space-y-2">
+              <Textarea
+                value={newFocus}
+                onChange={(e) => setNewFocus(e.target.value)}
+                placeholder="e.g. only chapters 3-4, the formulas, what's likely on the midterm…"
+                rows={2}
+                autoFocus
+                onKeyDown={(e) => { if (e.key === "Escape") setEditingFocus(false); }}
+              />
+              <div className="flex items-center gap-2">
+                <Button size="sm" onClick={handleSaveFocus} disabled={savingFocus || aiLoading}>
+                  {savingFocus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save & regenerate"}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setEditingFocus(false)}>Cancel</Button>
+              </div>
+            </div>
+          ) : set.focus && (
+            <button
+              className="mt-2 flex items-start gap-1.5 text-left text-sm text-muted-foreground hover:text-foreground"
+              onClick={() => { setNewFocus(set.focus ?? ""); setEditingFocus(true); }}
+            >
+              <Target className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <span>Focus: {set.focus}</span>
+            </button>
+          )}
         </div>
 
         {!renaming && (
@@ -238,6 +287,10 @@ export default function LearnStudySet() {
               <DropdownMenuItem onClick={() => { setNewTitle(set.title); setRenaming(true); }}>
                 <Pencil className="mr-2 h-3.5 w-3.5" />
                 Rename
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { setNewFocus(set.focus ?? ""); setEditingFocus(true); }}>
+                <Target className="mr-2 h-3.5 w-3.5" />
+                {set.focus ? "Edit focus" : "Set focus"}
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
