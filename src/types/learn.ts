@@ -96,7 +96,7 @@ export interface StudyMessage {
 
 export interface ExtractedMaterial {
   file_name: string;
-  kind: "pdf" | "docx" | "pptx" | "text" | "paste";
+  kind: "pdf" | "docx" | "pptx" | "text" | "paste" | "epub" | "html" | "xlsx" | "odf";
   content: string;
   char_count: number;
 }

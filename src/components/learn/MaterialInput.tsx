@@ -5,7 +5,11 @@
  *   PDF   — pdfjs-dist with [Page N] markers
  *   PPTX  — jszip: slide text + speaker notes, [Slide N] markers
  *   DOCX  — jszip: word/document.xml text extraction
- *   TXT / MD — read as plain text
+ *   EPUB  — jszip: chapters in spine order, [Chapter N] markers
+ *   XLSX  — jszip: each sheet as tab-separated rows
+ *   ODT / ODS / ODP — jszip: content.xml paragraphs
+ *   HTML  — DOMParser text
+ *   Anything else that is text (TXT, MD, CSV, JSON, code…) — read as plain text
  *   Paste — freeform textarea
  *
  * Emits the current list of ExtractedMaterial objects via onChange whenever
@@ -29,6 +33,7 @@ interface MaterialInputProps {
 
 const kindLabel: Record<string, string> = {
   pdf: "PDF", docx: "DOCX", pptx: "PPTX", text: "TXT", paste: "Paste",
+  epub: "EPUB", html: "HTML", xlsx: "XLSX", odf: "ODF",
 };
 
 const kindColor: Record<string, string> = {
@@ -37,6 +42,10 @@ const kindColor: Record<string, string> = {
   pptx:  "bg-orange-500/15 text-orange-400 border-orange-500/30",
   text:  "bg-muted text-muted-foreground",
   paste: "bg-primary/15 text-primary border-primary/30",
+  epub:  "bg-purple-500/15 text-purple-400 border-purple-500/30",
+  html:  "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
+  xlsx:  "bg-green-500/15 text-green-400 border-green-500/30",
+  odf:   "bg-sky-500/15 text-sky-400 border-sky-500/30",
 };
 
 function fmtChars(n: number) {
@@ -115,6 +124,83 @@ async function extractDocx(file: File): Promise<string> {
     .join(" ");
 }
 
+// Text of a parsed XML/HTML doc, with a newline after each block element.
+function blockText(doc: Document, blocks: string[]): string {
+  const root = doc.body ?? doc.documentElement;
+  for (const el of Array.from(root.getElementsByTagName("*"))) {
+    if (blocks.includes(el.localName.toLowerCase())) el.append("\n");
+  }
+  return (root.textContent ?? "").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n\n").trim();
+}
+
+const HTML_BLOCKS = ["p", "div", "br", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre"];
+
+export function htmlText(markup: string): string {
+  return blockText(new DOMParser().parseFromString(markup, "text/html"), HTML_BLOCKS);
+}
+
+export async function extractEpub(file: File): Promise<string> {
+  const JSZip = (await import("jszip")).default;
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const parse = (xml: string) => new DOMParser().parseFromString(xml, "application/xml");
+
+  const container = parse(await zip.file("META-INF/container.xml")!.async("text"));
+  const opfPath = container.getElementsByTagName("rootfile")[0].getAttribute("full-path")!;
+  const opfDir = opfPath.includes("/") ? opfPath.slice(0, opfPath.lastIndexOf("/") + 1) : "";
+  const opf = parse(await zip.file(opfPath)!.async("text"));
+
+  const hrefs: Record<string, string> = {};
+  for (const item of Array.from(opf.getElementsByTagName("item"))) {
+    hrefs[item.getAttribute("id")!] = item.getAttribute("href")!;
+  }
+
+  const chapters: string[] = [];
+  for (const ref of Array.from(opf.getElementsByTagName("itemref"))) {
+    const href = hrefs[ref.getAttribute("idref")!];
+    const entry = href && zip.file(opfDir + decodeURIComponent(href.split("#")[0]));
+    if (!entry) continue;
+    const text = htmlText(await entry.async("text"));
+    if (text) chapters.push(`[Chapter ${chapters.length + 1}]\n${text}`);
+  }
+  return chapters.join("\n\n");
+}
+
+export async function extractXlsx(file: File): Promise<string> {
+  const JSZip = (await import("jszip")).default;
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const parse = (xml: string) => new DOMParser().parseFromString(xml, "application/xml");
+
+  const sharedXml = zip.file("xl/sharedStrings.xml");
+  const shared = sharedXml
+    ? Array.from(parse(await sharedXml.async("text")).getElementsByTagName("si")).map((si) => si.textContent ?? "")
+    : [];
+
+  const sheetFiles = Object.keys(zip.files)
+    .filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name))
+    .sort((a, b) => parseInt(a.match(/(\d+)\.xml/)![1]) - parseInt(b.match(/(\d+)\.xml/)![1]));
+
+  const sheets: string[] = [];
+  for (let i = 0; i < sheetFiles.length; i++) {
+    const doc = parse(await zip.file(sheetFiles[i])!.async("text"));
+    const rows = Array.from(doc.getElementsByTagName("row")).map((row) =>
+      Array.from(row.getElementsByTagName("c")).map((c) => {
+        const v = c.getElementsByTagName("v")[0]?.textContent ?? c.textContent ?? "";
+        return c.getAttribute("t") === "s" ? shared[Number(v)] ?? "" : v;
+      }).join("\t"),
+    ).filter((row) => row.trim());
+    if (rows.length) sheets.push(`[Sheet ${i + 1}]\n${rows.join("\n")}`);
+  }
+  return sheets.join("\n\n");
+}
+
+// OpenDocument (odt / ods / odp): all text lives in content.xml.
+export async function extractOdf(file: File): Promise<string> {
+  const JSZip = (await import("jszip")).default;
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const doc = new DOMParser().parseFromString(await zip.file("content.xml")!.async("text"), "application/xml");
+  return blockText(doc, ["p", "h", "table-row", "page"]);
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -161,11 +247,30 @@ export function MaterialInput({ value, onChange, disabled = false }: MaterialInp
       } else if (ext === "docx") {
         kind = "docx";
         content = await extractDocx(file);
-      } else if (["txt", "md"].includes(ext)) {
-        kind = "text";
-        content = await file.text();
+      } else if (ext === "epub") {
+        kind = "epub";
+        content = await extractEpub(file);
+      } else if (ext === "xlsx") {
+        kind = "xlsx";
+        content = await extractXlsx(file);
+      } else if (["odt", "ods", "odp"].includes(ext)) {
+        kind = "odf";
+        content = await extractOdf(file);
+      } else if (["html", "htm", "xhtml"].includes(ext)) {
+        kind = "html";
+        content = htmlText(await file.text());
       } else {
-        setErrors((e) => ({ ...e, [name]: `Unsupported file type: .${ext}` }));
+        // Anything else: accept it if it is text, reject binary (NUL bytes).
+        content = await file.text();
+        if (content.slice(0, 8000).includes("\u0000")) {
+          const hint = ["doc", "ppt", "xls"].includes(ext) ? ` Save it as .${ext}x and try again.` : "";
+          setErrors((e) => ({ ...e, [name]: `Can't read text from .${ext} files.${hint}` }));
+          return;
+        }
+      }
+
+      if (!content.trim()) {
+        setErrors((e) => ({ ...e, [name]: "No text found in this file." }));
         return;
       }
 
@@ -217,7 +322,6 @@ export function MaterialInput({ value, onChange, disabled = false }: MaterialInp
           ref={fileInputRef}
           type="file"
           multiple
-          accept=".pdf,.pptx,.docx,.txt,.md"
           className="hidden"
           onChange={(e) => e.target.files && handleFiles(e.target.files)}
         />
@@ -230,7 +334,7 @@ export function MaterialInput({ value, onChange, disabled = false }: MaterialInp
           <div className="flex flex-col items-center gap-2">
             <Upload className="h-8 w-8 text-muted-foreground" />
             <p className="font-medium text-foreground">Drop files here or click to browse</p>
-            <p className="text-xs text-muted-foreground">PDF, PPTX, DOCX, TXT, MD — multiple files OK</p>
+            <p className="text-xs text-muted-foreground">PDF, EPUB, DOCX, PPTX, XLSX, ODT, HTML, TXT, CSV… — multiple files OK</p>
           </div>
         )}
       </div>
