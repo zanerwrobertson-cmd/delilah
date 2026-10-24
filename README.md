@@ -7,6 +7,7 @@ Delilah turns a course syllabus into a plan for actually studying it. Upload you
 - **Syllabus upload:** drop in a PDF and Delilah extracts assignments, due dates and weekly topics. Flag any topic as a weak area.
 - **Study plans:** week-by-week plans per course, built around your deadlines, weak areas, learning style and how many days a week you want to study.
 - **Quiz Me:** 10 AI-written multiple-choice questions per quiz, in three modes (standard, 30-second time crunch, easy-to-hard exam prep). Save a quiz mid-way and resume later.
+- **Learn:** upload textbook chapters, lecture slides (PPTX), notes (DOCX/PDF/TXT) and get a full breakdown — overview, accordion sections with source citations, key terms, formulas (KaTeX), common mistakes, exam focus. Flip-card drill with keyboard shortcuts (Space/1/2). 10-question practice set (MCQ + AI-graded short answer). Conversational tutor grounded in your material, with Explain and Socratic modes.
 - **Onboarding:** a 3-step setup (learning style, struggle subjects, grades) that personalises the AI.
 - **Accounts:** sign up, log in, password reset. Every user only ever sees their own data.
 
@@ -18,6 +19,8 @@ Delilah turns a course syllabus into a plan for actually studying it. Upload you
 | Backend | Supabase: Postgres with row-level security, Auth, Edge Functions (Deno) |
 | AI | Anthropic Claude, called only from edge functions so the API key never reaches the browser |
 | PDF parsing | pdf.js, runs in the browser |
+| PPTX/DOCX parsing | jszip, runs in the browser |
+| Math rendering | KaTeX via rehype-katex + remark-math |
 
 ## How it works
 
@@ -65,6 +68,9 @@ All tables are in `supabase/migrations/`. Each row belongs to one user (`user_id
 | `study_sessions` | One row per generated plan week (history) | Study Plan |
 | `quiz_results` | Score, mode, weak areas and time for each finished quiz | Quiz Me |
 | `quiz_progress` | Questions, answers and position of unfinished quizzes | Quiz Me |
+| `study_sets` | Title, course, and the generated guide/flashcards/practice (JSONB) | Learn |
+| `study_materials` | Extracted text from each uploaded file (PDF/PPTX/DOCX/text/paste) | Learn |
+| `study_messages` | Full chat history with the tutor, per study set | Learn |
 
 There is also a private `syllabi` storage bucket with per-user folders. The app doesn't use it yet, because PDFs are read in the browser and never uploaded.
 
@@ -75,6 +81,7 @@ There is also a private `syllabi` storage bucket with per-user folders. The app 
 | `claude-proxy` | a finished prompt | Claude's text reply | Upload Syllabus |
 | `generate-quiz` | course, topics, weak areas, learning style, mode | 10 questions as JSON | Quiz Me |
 | `generate-study-plan` | course, topics, assignments, weak areas, days/week | weekly plan as JSON | Study Plan |
+| `learn` | action + setId (guide/flashcards/practice/chat/grade) | structured JSON (tool_use) or chat reply | Learn |
 
 ## Project structure
 
@@ -91,8 +98,11 @@ src/
     UploadSyllabus.tsx     #   PDF -> assignments + topics
     StudyPlan.tsx          #   AI weekly study plans
     QuizMe.tsx             #   quiz flow (state + data); screens in components/quiz
+    Learn.tsx              #   study set list + new set dialog
+    LearnStudySet.tsx      #   5-tab study page (breakdown/flashcards/practice/tutor/materials)
     ExamPrep.tsx, SettingsPage.tsx, NotFound.tsx
   components/
+    learn/                 # Learn feature: AiText renderer, MaterialInput, tab components
     ProtectedRoute.tsx     # Login/onboarding guard
     AppSidebar.tsx         # Sidebar navigation
     quiz/                  # Quiz screens: course picker, mode picker, questions, results, saved list
