@@ -83,7 +83,7 @@ export function TutorTab({
       const assistant: StudyMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: data.message,
+        content: data?.message ?? "",
         created_at: new Date().toISOString(),
       };
       onMessagesUpdate([...messages, optimistic, assistant]);

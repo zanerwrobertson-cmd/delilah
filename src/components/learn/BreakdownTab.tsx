@@ -53,6 +53,14 @@ export function BreakdownTab({ guide, loading, onRegenerate, onTutorPrompt }: Br
     );
   }
 
+  // The AI can omit fields (or a reply can be cut short), so default every list.
+  const sections    = guide.sections ?? [];
+  const keyTerms    = guide.key_terms ?? [];
+  const formulas    = guide.formulas ?? [];
+  const mistakes    = guide.common_mistakes ?? [];
+  const examFocus   = guide.exam_focus ?? [];
+  const connections = guide.connections ?? [];
+
   return (
     <div className="space-y-6">
       {/* Regenerate controls */}
@@ -103,11 +111,11 @@ export function BreakdownTab({ guide, loading, onRegenerate, onTutorPrompt }: Br
       </Card>
 
       {/* Sections */}
-      {guide.sections.length > 0 && (
+      {sections.length > 0 && (
         <div className="space-y-2">
           <h2 className="font-display font-bold text-foreground">Sections</h2>
           <Accordion type="multiple" className="space-y-2">
-            {guide.sections.map((section, i) => (
+            {sections.map((section, i) => (
               <AccordionItem
                 key={i}
                 value={`section-${i}`}
@@ -129,9 +137,9 @@ export function BreakdownTab({ guide, loading, onRegenerate, onTutorPrompt }: Br
                 <AccordionContent className="space-y-4 pb-4">
                   <AiText>{section.explanation}</AiText>
 
-                  {section.key_points.length > 0 && (
+                  {(section.key_points ?? []).length > 0 && (
                     <ul className="space-y-1.5">
-                      {section.key_points.map((pt, j) => (
+                      {(section.key_points ?? []).map((pt, j) => (
                         <li key={j} className="flex items-start gap-2 text-sm">
                           <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
                           <span className="text-muted-foreground">{pt}</span>
@@ -168,11 +176,11 @@ export function BreakdownTab({ guide, loading, onRegenerate, onTutorPrompt }: Br
       )}
 
       {/* Key terms */}
-      {guide.key_terms.length > 0 && (
+      {keyTerms.length > 0 && (
         <div className="space-y-3">
           <h2 className="font-display font-bold text-foreground">Key Terms</h2>
           <div className="grid gap-3 sm:grid-cols-2">
-            {guide.key_terms.map((term, i) => (
+            {keyTerms.map((term, i) => (
               <Card key={i} className="p-4 space-y-1">
                 <p className="font-semibold text-foreground text-sm">{term.term}</p>
                 <p className="text-sm text-muted-foreground">{term.definition}</p>
@@ -186,14 +194,14 @@ export function BreakdownTab({ guide, loading, onRegenerate, onTutorPrompt }: Br
       )}
 
       {/* Formulas */}
-      {guide.formulas && guide.formulas.length > 0 && (
+      {formulas.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <FlaskConical className="h-4 w-4 text-primary" />
             <h2 className="font-display font-bold text-foreground">Formulas</h2>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            {guide.formulas.map((f, i) => (
+            {formulas.map((f, i) => (
               <Card key={i} className="p-4 space-y-2">
                 <p className="font-semibold text-foreground text-sm">{f.name}</p>
                 <AiText>{`$$${f.latex}$$`}</AiText>
@@ -205,14 +213,14 @@ export function BreakdownTab({ guide, loading, onRegenerate, onTutorPrompt }: Br
       )}
 
       {/* Common mistakes */}
-      {guide.common_mistakes.length > 0 && (
+      {mistakes.length > 0 && (
         <Card className="p-5 space-y-3">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-orange-400" />
             <h2 className="font-display font-bold text-foreground">Common Mistakes</h2>
           </div>
           <ul className="space-y-2">
-            {guide.common_mistakes.map((m, i) => (
+            {mistakes.map((m, i) => (
               <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
                 <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-400" />
                 {m}
@@ -223,14 +231,14 @@ export function BreakdownTab({ guide, loading, onRegenerate, onTutorPrompt }: Br
       )}
 
       {/* Exam focus */}
-      {guide.exam_focus.length > 0 && (
+      {examFocus.length > 0 && (
         <Card className="p-5 space-y-3">
           <div className="flex items-center gap-2">
             <GraduationCap className="h-4 w-4 text-primary" />
             <h2 className="font-display font-bold text-foreground">Likely on the Exam</h2>
           </div>
           <div className="flex flex-wrap gap-2">
-            {guide.exam_focus.map((item, i) => (
+            {examFocus.map((item, i) => (
               <Badge key={i} variant="outline" className="bg-primary/10 text-primary border-primary/30 text-xs">
                 {item}
               </Badge>
@@ -240,14 +248,14 @@ export function BreakdownTab({ guide, loading, onRegenerate, onTutorPrompt }: Br
       )}
 
       {/* Connections */}
-      {guide.connections && guide.connections.length > 0 && (
+      {connections.length > 0 && (
         <Card className="p-5 space-y-3">
           <div className="flex items-center gap-2">
             <Link2 className="h-4 w-4 text-emerald-400" />
             <h2 className="font-display font-bold text-foreground">Connections</h2>
           </div>
           <ul className="space-y-2">
-            {guide.connections.map((c, i) => (
+            {connections.map((c, i) => (
               <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
                 <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
                 {c}
