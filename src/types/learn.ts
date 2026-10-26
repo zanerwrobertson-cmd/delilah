@@ -2,11 +2,18 @@
 // These mirror the JSON shapes stored in study_sets.guide / .flashcards / .practice
 // and returned by the learn edge function.
 
+export interface CheckQuestion {
+  question: string;
+  answer: string;
+}
+
 export interface GuideSection {
   title: string;
   explanation: string;
   key_points: string[];
   source?: string;
+  worked_example?: string;
+  check_questions?: CheckQuestion[];
 }
 
 export interface KeyTerm {

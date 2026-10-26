@@ -1,8 +1,8 @@
 /**
  * BreakdownTab — shows the AI-generated study guide.
  *
- * Sections: overview card, accordion sections (each with "Explain simpler" /
- * "Quiz me on this" buttons), key terms grid, formula cards, common mistakes,
+ * Sections: overview card, accordion sections (lesson, key points, worked
+ * example, check-yourself questions, "Explain simpler" / "Quiz me on this"), key terms grid, formula cards, common mistakes,
  * exam focus, topic connections. "Regenerate" with optional focus input.
  */
 import { useState } from "react";
@@ -38,7 +38,7 @@ export function BreakdownTab({ guide, loading, onRegenerate, onTutorPrompt }: Br
     return (
       <div className="flex flex-col items-center gap-4 py-20 text-muted-foreground">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-sm">Delilah is reading your material…</p>
+        <p className="text-sm">Delilah is writing an in-depth breakdown. This takes a minute or two…</p>
       </div>
     );
   }
@@ -146,6 +146,30 @@ export function BreakdownTab({ guide, loading, onRegenerate, onTutorPrompt }: Br
                         </li>
                       ))}
                     </ul>
+                  )}
+
+                  {section.worked_example && (
+                    <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-primary">Worked example</p>
+                      <AiText>{section.worked_example}</AiText>
+                    </div>
+                  )}
+
+                  {(section.check_questions ?? []).length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Check yourself</p>
+                      {(section.check_questions ?? []).map((cq, j) => (
+                        <details key={j} className="group rounded-lg border border-border bg-muted/30 px-4 py-3">
+                          <summary className="cursor-pointer list-none text-sm font-medium text-foreground">
+                            {cq.question}
+                            <span className="ml-2 text-xs font-normal text-primary group-open:hidden">Show answer</span>
+                          </summary>
+                          <div className="mt-2 border-t border-border pt-2">
+                            <AiText>{cq.answer}</AiText>
+                          </div>
+                        </details>
+                      ))}
+                    </div>
                   )}
 
                   <div className="flex gap-2 pt-1">
