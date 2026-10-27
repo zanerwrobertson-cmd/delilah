@@ -54,7 +54,8 @@ export default function LearnStudySet() {
   const [messages, setMessages]         = useState<StudyMessage[]>([]);
   const [loadingSet, setLoadingSet]     = useState(true);
   const [activeTab, setActiveTab]       = useState("breakdown");
-  const [aiLoading, setAiLoading]       = useState(false);
+  // Which AI actions are in flight, per action, so a long guide run does not block or fake-load other tabs.
+  const [pending, setPending]           = useState<Record<string, boolean>>({});
 
   // Tutor pre-fill from Breakdown buttons
   const [tutorMsg, setTutorMsg] = useState<string | undefined>(undefined);
@@ -111,21 +112,21 @@ export default function LearnStudySet() {
 
   // Auto-generate guide on first visit
   useEffect(() => {
-    if (set && !set.guide && !aiLoading) {
+    if (set && !set.guide && !pending.guide) {
       callLearn("guide");
     }
   }, [set?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-generate flashcards / practice when switching to those tabs for the first time
   useEffect(() => {
-    if (!set || aiLoading) return;
-    if (activeTab === "flashcards" && !set.flashcards) callLearn("flashcards");
-    if (activeTab === "practice"   && !set.practice)   callLearn("practice");
+    if (!set) return;
+    if (activeTab === "flashcards" && !set.flashcards && !pending.flashcards) callLearn("flashcards");
+    if (activeTab === "practice"   && !set.practice   && !pending.practice)   callLearn("practice");
   }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const callLearn = async (action: string, focus?: string) => {
     if (!id) return;
-    setAiLoading(true);
+    setPending((p) => ({ ...p, [action]: true }));
     try {
       const { data, error } = await supabase.functions.invoke("learn", {
         body: { action, setId: id, ...(focus ? { focus } : {}) },
@@ -138,7 +139,7 @@ export default function LearnStudySet() {
       // Merge returned field into local set state
       setSet((prev) => prev ? { ...prev, ...data } : prev);
     } finally {
-      setAiLoading(false);
+      setPending((p) => ({ ...p, [action]: false }));
     }
   };
 
@@ -259,7 +260,7 @@ export default function LearnStudySet() {
                 onKeyDown={(e) => { if (e.key === "Escape") setEditingFocus(false); }}
               />
               <div className="flex items-center gap-2">
-                <Button size="sm" onClick={handleSaveFocus} disabled={savingFocus || aiLoading}>
+                <Button size="sm" onClick={handleSaveFocus} disabled={savingFocus || !!pending.guide}>
                   {savingFocus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save & regenerate"}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setEditingFocus(false)}>Cancel</Button>
@@ -317,7 +318,7 @@ export default function LearnStudySet() {
         <TabsContent value="breakdown">
           <BreakdownTab
             guide={set.guide}
-            loading={aiLoading && activeTab === "breakdown" && !set.guide}
+            loading={!!pending.guide && !set.guide}
             onRegenerate={(focus) => handleRegenerate("guide", focus)}
             onTutorPrompt={handleTutorPrompt}
           />
@@ -326,7 +327,7 @@ export default function LearnStudySet() {
         <TabsContent value="flashcards">
           <FlashcardsTab
             flashcards={set.flashcards}
-            loading={aiLoading && activeTab === "flashcards" && !set.flashcards}
+            loading={!!pending.flashcards && !set.flashcards}
             onGenerate={() => callLearn("flashcards")}
           />
         </TabsContent>
@@ -335,7 +336,7 @@ export default function LearnStudySet() {
           <PracticeTab
             practice={set.practice}
             setId={set.id}
-            loading={aiLoading && activeTab === "practice" && !set.practice}
+            loading={!!pending.practice && !set.practice}
             onGenerate={() => callLearn("practice")}
           />
         </TabsContent>
