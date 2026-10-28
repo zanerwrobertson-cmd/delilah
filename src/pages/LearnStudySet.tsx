@@ -117,19 +117,18 @@ export default function LearnStudySet() {
     }
   }, [set?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-generate flashcards / practice when switching to those tabs for the first time
+  // Auto-generate flashcards when switching to that tab for the first time (practice waits for a difficulty)
   useEffect(() => {
     if (!set) return;
     if (activeTab === "flashcards" && !set.flashcards && !pending.flashcards) callLearn("flashcards");
-    if (activeTab === "practice"   && !set.practice   && !pending.practice)   callLearn("practice");
   }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const callLearn = async (action: string, focus?: string) => {
+  const callLearn = async (action: string, extra: Record<string, string> = {}) => {
     if (!id) return;
     setPending((p) => ({ ...p, [action]: true }));
     try {
       const { data, error } = await supabase.functions.invoke("learn", {
-        body: { action, setId: id, ...(focus ? { focus } : {}) },
+        body: { action, setId: id, ...extra },
       });
       if (error) {
         const body = await (error as { context?: Response }).context?.json().catch(() => null);
@@ -149,7 +148,7 @@ export default function LearnStudySet() {
   };
 
   const handleRegenerate = (action: string, focus?: string) => {
-    callLearn(action, focus);
+    callLearn(action, focus ? { focus } : {});
   };
 
   const handleRegenerateAll = () => {
@@ -336,8 +335,8 @@ export default function LearnStudySet() {
           <PracticeTab
             practice={set.practice}
             setId={set.id}
-            loading={!!pending.practice && !set.practice}
-            onGenerate={() => callLearn("practice")}
+            loading={!!pending.practice}
+            onGenerate={(difficulty) => callLearn("practice", { difficulty })}
           />
         </TabsContent>
 

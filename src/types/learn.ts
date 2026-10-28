@@ -48,6 +48,8 @@ export interface Flashcards {
   cards: Flashcard[];
 }
 
+export type Difficulty = "easy" | "medium" | "hard";
+
 export interface MCQQuestion {
   type: "mcq";
   question: string;
@@ -72,6 +74,7 @@ export type PracticeQuestion = MCQQuestion | ShortAnswerQuestion;
 
 export interface Practice {
   questions: PracticeQuestion[];
+  difficulty?: Difficulty;
 }
 
 export interface StudyMaterialRow {
